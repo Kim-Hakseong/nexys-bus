@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>NexysBus — PROJECT (mockup)</title>
+<link rel="stylesheet" href="../../bus/web/src/styles.css"><link rel="stylesheet" href="bus-shell.css">
+<style>@font-face { font-family: 'Inter'; src: url('../../bus/web/public/fonts/Inter.ttf'); } @font-face { font-family: 'JetBrains Mono'; src: url('../../bus/web/public/fonts/JetBrainsMono-Regular.ttf'); } @font-face { font-family: 'Instrument Serif'; src: url('../../bus/web/public/fonts/InstrumentSerif-Regular.ttf'); }</style>
+</head><body><div id="app">
+<header class="hdr"><div class="hdr-brand"><div class="hdr-logo"><img src="../../bus/web/public/brand/Logo.png" alt="NexysBus"></div><div class="hdr-name"><b>NexysBus</b><small>0.1.0 BETA</small></div></div>
+  <div class="hdr-tools"><span class="proj">SelfTest project <span class="dim">selftest.nxb · modified</span></span><div class="vsep"></div><button class="tool">OPEN</button><button class="tool">SAVE</button><div class="vsep"></div><button class="tool">THEME</button><button class="tool">PLOT · DARK</button><div class="vsep"></div><button class="tool icon">?</button><div class="led-pill"><span class="led"></span><span class="led-text">READY</span></div></div></header>
+<div class="body"><nav class="rail"><button class="home">⌂</button><button class="on">PROJECT</button><button>ANALYZE</button><button>SIMULATE</button><button>ICD</button><span class="sp"></span><button>SETTINGS</button></nav>
+<main class="main"><div class="project">
+  <section class="card"><div class="card-h"><span class="t">PROJECT</span><span class="m">selftest.nxb</span></div><div class="body-p">
+    <div class="row2"><span class="k">NAME</span><input class="in" value="SelfTest project"></div>
+    <div class="row2"><span class="k">FILE</span><span class="mono muted11">C:\Users\USER\Documents\NexysBus\selftest.nxb</span><span class="d"><button class="pill h24">SAVE</button> <button class="pill h24">SAVE AS…</button> <button class="pill h24">CLOSE</button></span></div>
+    <div class="row2"><span class="k">CAPTURE FOLDER</span><input class="in" value="%LOCALAPPDATA%\NexysBus\captures"><button class="pill h24">PICK…</button></div>
+  </div></section>
+  <section class="card"><div class="card-h"><span class="t">DEVICE</span><span class="m">1 available</span></div><div class="body-p"><div class="dev-list">
+    <div class="dev on"><span class="ic">▣</span><div><div class="nm">Virtual bus</div><div class="dt">software BC + simulated RTs + monitor</div></div><span class="chip">SELECTED</span></div>
+    <div class="dev off"><span class="ic">▢</span><div><div class="nm">1553 card (driver)</div><div class="dt">no cards found — hardware day</div></div><span class="chip">UNAVAILABLE</span></div>
+  </div><div class="row2"><button class="pill h24" disabled>SEARCH HARDWARE</button><span class="d">드라이버 카드가 있는 PC에서 활성화</span></div></div></section>
+  <section class="card"><div class="card-h"><span class="t">BUS</span><span class="m">channel 0 · 1553B</span></div><div class="body-p">
+    <div class="row2"><span class="k">CHANNEL</span><select class="sel"><option>0</option><option>1</option></select><span class="d">카드 채널 (가상 버스는 1개)</span></div>
+    <div class="row2"><span class="k">MINOR FRAME</span><input class="in w80" value="10"><span class="muted11">ms</span><span class="d">0 = 가장 짧은 메시지 주기</span></div>
+    <div class="row2"><span class="k">RT RESPONSE</span><input class="in w80" value="100"><span class="muted11">× 0.1 µs</span><span class="d">8–12 µs 응답 지연</span></div>
+    <div class="row2"><span class="k">GAP</span><input class="in w80" value="4"><span class="muted11">µs</span><span class="d">메시지 간격</span></div>
+    <div class="row2"><span class="k">SEED</span><input class="in w80" value="1"><span class="d">응답 시간 지터 시드</span></div>
+  </div></section>
+  <section class="card"><div class="card-h"><span class="t">ICD · FRAME</span><span class="m">dummy_icd.csv</span></div><div class="body-p">
+    <div class="stat-row"><div><div class="k">MESSAGES</div><div class="v">10</div></div><div><div class="k">WORDS</div><div class="v">40</div></div><div><div class="k">ERRORS</div><div class="v">0</div></div></div>
+    <div class="row2"><button class="pill h24 primary">ICD →</button><button class="pill h24">IMPORT SIMULATOR PROJECT…</button><button class="pill h24">EXPORT SIMULATOR PROJECT…</button></div>
+    <div class="row2"><span class="k">TEMPLATE</span><span class="mono muted11">…\My Templates\1553 Single Msg Template</span><span class="d">설정에서 변경</span></div>
+  </div></section>
+</div></main></div>
+<footer class="ftr"><span class="d"></span><span class="txt">Project SelfTest project: 10 messages, device virtual</span><span class="r"></span></footer>
+</div></body></html>
