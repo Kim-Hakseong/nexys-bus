@@ -32,7 +32,7 @@ function renderHeader() {
   const tool = (act: string, icon: string, label: string, title: string, disabled = false) => `<button type="button" class="tool" data-a="${act}" aria-label="${label}" title="${title}"${disabled ? ' disabled' : ''}>${icon}<span>${label}</span></button>`;
   const chip = p.name && S.rail !== 'START' ? `<span class="proj" title="${esc(p.path || '(unsaved)')}">${esc(p.name)} <span class="dim">${esc(p.path ? p.path.split(/[\\/]/).pop() : 'unsaved')}${p.dirty ? ' · modified' : ''}</span></span>` : `<span class="proj">No project <span class="dim">—</span></span>`;
   hdr.innerHTML = `<div class="hdr-brand"><div class="hdr-logo" data-a="about" title="About NexysBus (F1 = help)"><img src="brand/Logo.png" alt="Nexys"></div><div class="hdr-name"><b>${esc(a.name || 'NexysBus')}</b><small>${esc((a.versionText || '').toUpperCase())}</small></div></div>
-    <div class="hdr-tools">${chip}<div class="vsep"></div>${tool('open', I.folder(), 'OPEN', 'Open project / capture / ICD (Ctrl+O)')}${tool('save', I.save(), 'SAVE', 'Save project (Ctrl+S)', !p.name)}<div class="vsep"></div>${tool('theme', S.theme === 'dark' ? I.sun() : I.theme(), 'THEME', 'Light / dark (Ctrl+T)')}${tool('plot', I.plot(), 'PLOT · ' + S.plot.toUpperCase(), 'Plot light / dark (Ctrl+P)')}<div class="vsep"></div><button type="button" class="tool icon" data-a="help" aria-label="HELP" title="사용 가이드 (F1)">${I.help()}</button>
+    <div class="hdr-tools">${chip}<div class="vsep"></div>${tool('open', I.folder(), 'OPEN', 'Open project / capture / ICD (Ctrl+O)')}${tool('save', I.save(), 'SAVE', 'Save project (Ctrl+S)', !p.name)}<div class="vsep"></div>${tool('theme', S.theme === 'dark' ? I.sun() : I.theme(), 'THEME', 'Light / dark (Ctrl+T)')}${tool('plot', I.plot(), 'PLOT · ' + S.plot.toUpperCase(), 'Plot light / dark (Ctrl+P)')}<div class="vsep"></div><button type="button" class="tool icon" data-a="help" aria-label="HELP" title="User guide (F1)">${I.help()}</button>
     <div class="led-pill"><span class="led ${S.status.led}"></span><span class="led-text">${S.status.led.toUpperCase()}</span></div></div>`;
 }
 function renderRail() {
@@ -62,6 +62,7 @@ function applyState(next: BusState) {
   S = next; document.documentElement.dataset.theme = S.theme; document.documentElement.dataset.plot = S.plot;
   renderHeader(); renderRail(); renderMain(); renderFooter(); help.setState(S);
   if (S.rail === 'START') start.setState(S); else if (S.rail === 'PROJECT') project.setState(S); else if (S.rail === 'ANALYZE') analyze.setState(S); else if (S.rail === 'SIMULATE') simulate.setState(S); else if (S.rail === 'ICD') icd.setState(S); else if (S.rail === 'SETTINGS') settings.setState(S);
+  ftr.querySelector('.r')!.textContent = (S.developer ? 'DEVELOPER · ' : '') + (ftr.querySelector('.r')!.textContent || '');
 }
 bridge.on('state', m => { const st = m.state as BusState; if (!st.files && S) st.files = S.files; else if (!st.files) st.files = []; applyState(st); });
 bridge.on('status', m => { if (!S) return; S.status = { text: m.text, led: m.led }; renderFooter(); const led = hdr.querySelector('.led'); if (led) { led.className = 'led ' + m.led; (hdr.querySelector('.led-text') as HTMLElement).textContent = m.led.toUpperCase(); } });
@@ -73,8 +74,8 @@ function showAbout() {
   if (!S || document.querySelector('.about')) return; const a = S.app ?? {};
   const dlg = h(`<div class="modal-bg"><div class="modal about"><div style="display:flex;align-items:center;gap:10px"><img src="brand/Logo.png" alt="" style="height:18px"><span class="ver">${esc(a.versionText || '')}</span></div>
     <div class="ttl">${esc(a.name || 'NexysBus')} — MIL-STD-1553 bus simulation and capture analysis</div>
-    <p>${a.beta ? '정식 출시 전 버전입니다. 앱 이름과 화면이 바뀔 수 있고, 하드웨어 카드 지원은 다음 단계입니다. 문제는 아래 피드백으로 알려 주세요.' : ''}</p>
-    <p>피드백: <a href="#" data-url="${esc(a.issues || '')}" style="color:var(--accent2);text-decoration:underline">GitHub Issues</a> · 저장소: <a href="#" data-url="${esc(a.repo || '')}" style="color:var(--accent2);text-decoration:underline">${esc(a.repo || '')}</a></p>
+    <p>${a.beta ? 'Pre-release build: the product name and screens may change, and hardware card support is the next step. Please report problems through the feedback link below.' : ''}</p>
+    <p>Feedback: <a href="#" data-url="${esc(a.issues || '')}" style="color:var(--accent2);text-decoration:underline">GitHub Issues</a> · Repository: <a href="#" data-url="${esc(a.repo || '')}" style="color:var(--accent2);text-decoration:underline">${esc(a.repo || '')}</a></p>
     <div class="btns"><button class="pill h30 primary" data-b="ok">CLOSE</button></div></div></div>`);
   dlg.addEventListener('click', e => { const t = e.target as HTMLElement; const u = (t.closest('[data-url]') as HTMLElement | null)?.dataset.url; if (u) { e.preventDefault(); bridge.call('openUrl', { url: u }); return; } if ((t.closest('[data-b]') as HTMLElement | null)?.dataset.b === 'ok' || t === dlg) dlg.remove(); });
   document.body.append(dlg);
@@ -84,8 +85,9 @@ document.addEventListener('keydown', e => {
   const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName);
   if (!(e.ctrlKey || e.metaKey)) { if (e.key === 'F5') e.preventDefault(); return; }
   const k = e.key.toLowerCase();
-  if (inInput && !['o', 's', '1', '2', '3', '4', '5'].includes(k)) return;
+  if (inInput && !['o', 's', 'd', '1', '2', '3', '4', '5'].includes(k)) return;
   if (k === 'o') { e.preventDefault(); bridge.call('openDialog'); } else if (k === 's') { e.preventDefault(); bridge.call('project.save'); }
+  else if (k === 'd' && e.shiftKey) { e.preventDefault(); bridge.call('setDeveloper', { on: !S?.developer }); }
   else if (k === 't') { e.preventDefault(); bridge.call('setTheme', { theme: S?.theme === 'dark' ? 'light' : 'dark' }); } else if (k === 'p') { e.preventDefault(); bridge.call('setPlot', { plot: S?.plot === 'dark' ? 'light' : 'dark' }); }
   else { const r = RAILS.find(x => x.key === k); if (r) { e.preventDefault(); setRail(r.id); } }
 });

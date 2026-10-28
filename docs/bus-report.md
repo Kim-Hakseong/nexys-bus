@@ -37,3 +37,7 @@
 
 ## 미확인 (UNVERIFIED)
 1553 타이밍은 근사(실카드 Δt로 보정), 캡처 메타 스텁(실 캡처 구조로 교체 예정), 시뮬레이터 프로젝트의 offset/unit 위치.
+
+## 0.1.0-beta.2 — UI feedback (10 items)
+ANALYZE: ERR column shows error bits only (HIT is a status flag → STAT column, hidden by default; 19,828 blank = 20,000 − 172 errors, the ERRORS ONLY / statistics definition), absolute time carries an "upper 32 bits not verified" tooltip with relative time as default, one-row filter bar (time display and columns behind the header ⋯ menu, CSV · CSV·EU · STATS on the panel header), BUS TREE navigator (RT → SA → ICD words with message / error counts; RAW toggle lists channels; 7 RT nodes = statistics), bits in 4-bit groups, trend card header (word · unit · LAST 10 s / 60 s / ALL · SEND TO VIEW as CSV). ICD: footer text never hidden, DUMMY only in developer mode (Ctrl+Shift+D), no internal identifiers in the export notes. UI text English throughout (help stays Korean). Fix: an ICD loaded before a capture now attaches to it.
+Gates added to `--v100rc` (ui1 … ui10, 12 gates): 42/42 PASS; `--bus` 14/14, `--v0100` 14/14, `--stress 50` 0 exceptions. Before/after captures: `--uishots --prefix before|after`.

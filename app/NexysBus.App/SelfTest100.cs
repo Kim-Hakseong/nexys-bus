@@ -89,6 +89,30 @@ public static partial class SelfTest
         GB("bus_stats", bars > 0 && st.GetProperty("count").GetInt32() == total && st.GetProperty("perRt").GetArrayLength() > 0 && st.GetProperty("busLoadPct").GetDouble() > 0, $"bars={bars} count={st.GetProperty("count")} rts={st.GetProperty("perRt").GetArrayLength()} load={st.GetProperty("busLoadPct").GetDouble():F1}% errors={st.GetProperty("errors")}");
         await Shot(w, "v100_04_decode_stats");
         await JS(w, "await nx.test.m1553().clickFilter('[data-a=stats]'); return true;");
+        // ---- docs/ui-feedback.md gates (3 ERR / STAT, 4 ABS tooltip, 5 filter bar, 6 RT tree, 2 bits, 7 trend header, 8 dev-only DUMMY, 9 no internal ids, 10 English)
+        int blank = 0, allRows = 0, nonErr = 0; using (var jd = JsonDocument.Parse(JsonSerializer.Serialize(e.Mil1553.Rows(0, 5000)))) foreach (var rr in jd.RootElement.GetProperty("rows").EnumerateArray()) { allRows++; if (!rr.GetProperty("e").GetBoolean()) nonErr++; if ((rr.GetProperty("err").GetString() ?? "").Length == 0) blank++; }
+        int statsErrAll = st.GetProperty("errors").GetInt32();
+        var cap0 = NexysView.Core.Mil1553.Mil1553DataSource.FileOf(e.State.Files.First(f => f.Format == "MIL1553"))!; int capErr = 0; for (int i = 0; i < cap0.Count; i++) if ((cap0.Error[i] & ~1) != 0) capErr++;
+        int blankAll = cap0.Count - capErr;
+        string headCols = (await JS(w, "return nx.test.m1553().columns().join(',');")).GetString() ?? "";
+        GB("ui3_err_blank_rows", blank == nonErr && blank > 0 && blankAll == cap0.Count - statsErrAll && !headCols.Contains("STAT") && headCols.Contains("ERR"), $"blank ERR cells (first 5000)={blank} = non-error rows {nonErr}; capture: blank={blankAll} = total {cap0.Count} − stats errors {statsErrAll}; STAT hidden by default, columns={headCols}");
+        await JS(w, "await nx.test.m1553().clickFilter('[data-time=abs]'); await nx.test.settle(); return true;"); await Idle(w, 150);
+        string absTip = (await JS(w, "return document.querySelector('.m1553-scroll .thead [data-sort=t]')?.title ?? '';")).GetString() ?? "";
+        await JS(w, "await nx.test.m1553().clickFilter('[data-time=rel]'); await nx.test.settle(); return true;"); await Idle(w, 150);
+        GB("ui4_abs_time_tooltip", absTip.Contains("not verified") && e.BusTime == "rel", $"tooltip='{absTip[..Math.Min(60, absTip.Length)]}' default={e.BusTime}");
+        int fbTime = (await JS(w, "return document.querySelectorAll('.m1553-filters [data-time], .m1553-filters [data-a=csvRows], .m1553-filters [data-a=stats], .m1553-filters [data-a=columns]').length;")).GetInt32();
+        int fbH = (await JS(w, "return Math.round(document.querySelector('.m1553-filters').getBoundingClientRect().height);")).GetInt32();
+        int hdrActs = (await JS(w, "return document.querySelectorAll('.m1553 > .card .card-h .acts [data-a=csvRows], .m1553 > .card .card-h .acts [data-a=csvDecoded], .m1553 > .card .card-h .acts [data-a=stats]').length;")).GetInt32();
+        GB("ui5_filter_bar_single_row", fbTime == 0 && fbH <= 44 && hdrActs == 3 && (await JS(w, "return !!document.querySelector('.m1553-scroll .thead .hmenu');")).GetBoolean(), $"display/export controls in the filter bar={fbTime} bar height={fbH} px header actions={hdrActs} header menu present");
+        var tree = JsonDocument.Parse((await JS(w, "return JSON.stringify(nx.test.m1553().tree());")).GetString()!).RootElement;
+        int rtNodes = tree.GetProperty("rts").GetInt32(); int nRt = st.GetProperty("perRt").GetArrayLength();
+        int treeFiltered = (await JS(w, "return await nx.test.m1553().treeClick('.m1553-tree [data-rt=\"3\"]:not([data-sa])');")).GetInt32();
+        int saNodes = (await JS(w, "return nx.test.m1553().tree().sas;")).GetInt32();
+        await JS(w, "await nx.test.m1553().treeClick('.m1553-tree [data-rt=\"3\"]:not([data-sa])'); return true;");
+        bool rawOn = (await JS(w, "return await nx.test.m1553().rawToggle();")).GetBoolean(); int rawCh = (await JS(w, "return nx.test.m1553().tree().channels;")).GetInt32();
+        await JS(w, "await nx.test.m1553().rawToggle(); return true;");
+        GB("ui6_rt_tree_nodes", rtNodes == nRt && treeFiltered == nRt3 && saNodes >= 1 && rawOn && rawCh == 43, $"RT nodes={rtNodes} = RTs {nRt}; RT 3 click → {treeFiltered} rows (filter gave {nRt3}); SA nodes={saNodes}; RAW channels={rawCh}");
+        await Shot(w, "v100_04b_tree_filters");
         // ---- 8) CSV exports (rows / decoded with EU) through the service path the dialog uses
         string csvRows = Path.Combine(dir, "rows.csv"), csvDec = Path.Combine(dir, "decoded.csv");
         int nr = e.Mil1553.ExportRowsCsv(csvRows, 0, 999); int nd = e.Mil1553.ExportDecodedCsv(csvDec, 0, 99);
@@ -167,6 +191,25 @@ public static partial class SelfTest
         var tj = await JS(w, "return await nx.test.m1553().trendFirst();"); await Idle(w, 400);
         int chart = tj.ValueKind == JsonValueKind.Number ? tj.GetInt32() : -1; var tc = e.Charts.FirstOrDefault(c => c.Id == chart);
         GB("icd_applied_decode_trend", words.Contains("\"eu\"") && JsonDocument.Parse(words).RootElement.GetArrayLength() == 4 && tc != null && tc.Model.Curves.Count == 1, $"eu words={JsonDocument.Parse(words).RootElement.GetArrayLength()} icd-named rows visible={icdCells} chart={chart} curves={tc?.Model.Curves.Count}");
+        string bits32 = JsonDocument.Parse(words).RootElement[0].GetProperty("bits").GetString() ?? "";
+        GB("ui2_bits_grouped", System.Text.RegularExpressions.Regex.IsMatch(bits32, "^[01]{4}( [01]{4}){7}$"), $"32-bit word bits='{bits32}'");
+        var tt = JsonDocument.Parse((await JS(w, "return JSON.stringify(nx.test.m1553().trendTools());")).GetString()!).RootElement;
+        double winAll = (await JS(w, "return await nx.test.m1553().setWindow(0);")).GetDouble(), win10 = (await JS(w, "return await nx.test.m1553().setWindow(10);")).GetDouble();
+        GB("ui7_trend_header", tt.GetProperty("wins").GetInt32() == 3 && tt.GetProperty("send").GetBoolean() && !tt.GetProperty("chartHeadVisible").GetBoolean() && (tt.GetProperty("label").GetString() ?? "").Contains("NAV_") && win10 <= 10.01 && winAll > win10, $"window pills={tt.GetProperty("wins")} send={tt.GetProperty("send")} generic chart header hidden={!tt.GetProperty("chartHeadVisible").GetBoolean()} label='{tt.GetProperty("label")}' x-range all={winAll:F2} s last10={win10:F2} s");
+        string sendPath = (await JS(w, "return await nx.call('trend.sendToView', { channel: nx.test.m1553().words()[0].ch });")).GetString() ?? "";
+        GB("ui7_trend_send_csv", File.Exists(sendPath) && File.ReadAllLines(sendPath).Length > 100, $"csv={sendPath} lines={(File.Exists(sendPath) ? File.ReadAllLines(sendPath).Length : 0)}");
+        int treeWords = (await JS(w, "return nx.test.m1553().tree().words;")).GetInt32();
+        GB("ui6_rt_tree_icd_words", treeWords >= 4, $"ICD word nodes under the opened RT={treeWords}");
+        int dummyBtn = (await JS(w, "await nx.test.rail('ICD'); await nx.test.settle(); return document.querySelectorAll('.icd-f [data-a=dummy]').length;")).GetInt32();
+        int dummyDev = (await JS(w, "await nx.call('setDeveloper', { on: true }); await new Promise(r => setTimeout(r, 300)); const n = document.querySelectorAll('.icd-f [data-a=dummy]').length; await nx.call('setDeveloper', { on: false }); await new Promise(r => setTimeout(r, 300)); return n;")).GetInt32();
+        string exportText = (await JS(w, "await nx.test.icd().open('export'); await new Promise(r => setTimeout(r, 300)); return document.querySelector('.icd-body')?.textContent ?? '';")).GetString() ?? "";
+        bool footerOk = (await JS(w, "await nx.test.icd().open('import'); await new Promise(r => setTimeout(r, 200)); const f = document.querySelector('.icd-f'); const t = f.querySelector('span'); const b = f.querySelector('.pill'); return t.getBoundingClientRect().right <= b.getBoundingClientRect().left + 1;")).GetBoolean();
+        GB("ui8_dev_only_dummy", dummyBtn == 0 && dummyDev == 1, $"DUMMY buttons normal={dummyBtn} developer={dummyDev}");
+        GB("ui9_no_internal_ids", !exportText.Contains("PROGID") && exportText.Contains("Simulator not installed"), $"export text has PROGID={exportText.Contains("PROGID")}");
+        GB("ui1_icd_footer_text_clear", footerOk, "footer text box ends before the first button");
+        string hangul = (await JS(w, "const rx = /[가-힣]/; const out = []; for (const r of ['PROJECT', 'SIMULATE', 'ICD', 'SETTINGS', 'ANALYZE']) { await nx.test.rail(r); await nx.test.settle(); const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); const t = Array.from(document.querySelectorAll('.main *')).filter(vis).map(x => (x.childNodes.length ? Array.from(x.childNodes).filter(n => n.nodeType === 3).map(n => n.textContent).join('') : '') + (x.getAttribute('placeholder') || '') + (x.getAttribute('title') || '')).join(''); if (rx.test(t)) out.push(r); } return out.join(',');")).GetString() ?? "";
+        GB("ui10_english_ui", hangul.Length == 0, $"rails with Korean text: '{hangul}' (help is Korean by design)");
+        await JS(w, "await nx.test.rail('ANALYZE'); await nx.test.settle(); return true;");
         await Shot(w, "v100_08_icd_trend");
         // ---- 11) ARINC 429 sample: open via the empty-state path (bridge), decode, filter by label / parity, stats
         string p429 = SampleBus.Ensure429()!; var df429 = e.OpenFile(p429)!; e.Mil1553.SelectFile(df429.Name); await JS(w, "await nx.test.settle(); return true;"); await Idle(w, 250);

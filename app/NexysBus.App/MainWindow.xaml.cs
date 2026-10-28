@@ -99,6 +99,22 @@ public partial class MainWindow : Window
                     var dlg = new SaveFileDialog { Title = "Capture folder (choose the folder)", Filter = "Folder|*.folder", FileName = "captures.folder" };
                     if (dlg.ShowDialog(this) != true) return null; Engine.Project.CaptureDir = Path.GetDirectoryName(dlg.FileName) ?? ""; Engine.Dirty = true; Engine.Touch(); return Engine.Project.CaptureDir;
                 }
+            case "trend.sendToView":   // the trend channel as CSV (time, value) → Nexys VIEW when installed, else the file stays for a manual open
+                {
+                    string id = Bridge.S(args, "channel"); var ch = Engine.Find(id); if (ch == null) { Engine.SetStatus("No trend channel"); return null; }
+                    string dir = Path.Combine(AppPaths.LocalDir, "trend"); Directory.CreateDirectory(dir);
+                    string safe = new string(ch.Name.Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray()); string path = Path.Combine(dir, $"{safe}_{DateTime.Now:HHmmss}.csv");
+                    using (var w = new StreamWriter(path, false, new System.Text.UTF8Encoding(true)))
+                    {
+                        w.WriteLine($"time_s,{safe}" + (ch.Unit.Length > 0 ? $" [{ch.Unit}]" : "")); var buf = new double[4096];
+                        for (long i = 0; i < ch.Length; i += buf.Length) { int got = ch.Source.Read(i, buf.AsSpan(0, (int)Math.Min(buf.Length, ch.Length - i))); for (int k = 0; k < got; k++) w.WriteLine($"{ch.XAt(i + k).ToString("R", System.Globalization.CultureInfo.InvariantCulture)},{buf[k].ToString("R", System.Globalization.CultureInfo.InvariantCulture)}"); }
+                    }
+                    var candidates = new[] { Path.Combine(AppContext.BaseDirectory, "NexysView.exe"), Path.Combine(AppContext.BaseDirectory, "..", "Nexys VIEW", "NexysView.exe"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Nexys VIEW", "NexysView.exe"), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Nexys VIEW", "NexysView.exe") };
+                    var exe = candidates.FirstOrDefault(File.Exists);
+                    if (exe != null && !SelfTest.Enabled) { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, $"\"{path}\"") { UseShellExecute = true }); Engine.SetStatus($"Sent {ch.Name} to Nexys VIEW ({ch.Length:N0} samples)"); }
+                    else Engine.SetStatus((exe == null ? "Nexys VIEW is not installed — " : "") + $"trend written to {path}");
+                    return path;
+                }
             case "capture": { string path = args.GetProperty("path").GetString()!; await CaptureAsync(path); return path; }
             case "quit": Close(); return null;
         }

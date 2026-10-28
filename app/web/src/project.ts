@@ -32,14 +32,14 @@ export class ProjectPage {
       </div></section>
       <section class="card"><div class="card-h"><span class="t">DEVICE</span><span class="m">${devs.filter(d => d.available).length} available</span></div><div class="body-p"><div class="dev-list">
         ${devs.map(d => `<div class="dev${d.id === p.device ? ' on' : ''}${d.available ? '' : ' off'}" data-dev="${esc(d.id)}"><span class="ic">${d.kind === 'virtual' ? '▣' : '▢'}</span><div><div class="nm">${esc(d.name)}</div><div class="dt">${esc(d.detail)}</div></div><span class="chip">${d.id === p.device ? 'SELECTED' : d.available ? 'AVAILABLE' : 'UNAVAILABLE'}</span></div>`).join('')}
-        ${devs.some(d => d.kind === 'hardware') ? '' : `<div class="dev off" data-dev="hw"><span class="ic">▢</span><div><div class="nm">1553 card (driver)</div><div class="dt">no cards found — hardware day</div></div><span class="chip">UNAVAILABLE</span></div>`}
-      </div>${row('', `<button class="pill h24" data-a="searchHw"${devs.some(d => d.kind === 'hardware') ? '' : ' disabled'}>SEARCH HARDWARE</button><span class="d">드라이버 카드가 있는 PC에서 활성화</span>`)}</div></section>
+        ${devs.some(d => d.kind === 'hardware') ? '' : `<div class="dev off" data-dev="hw"><span class="ic">▢</span><div><div class="nm">1553 card (driver)</div><div class="dt">no cards found — hardware support comes with the driver</div></div><span class="chip">UNAVAILABLE</span></div>`}
+      </div>${row('', `<button class="pill h24" data-a="searchHw"${devs.some(d => d.kind === 'hardware') ? '' : ' disabled'}>SEARCH HARDWARE</button><span class="d">Enabled on a PC with a driver card</span>`)}</div></section>
       <section class="card"><div class="card-h"><span class="t">BUS</span><span class="m">channel ${b.channel ?? 0} · 1553B</span></div><div class="body-p">
-        ${row('CHANNEL', `<select class="sel" data-f="channel">${[0, 1, 2, 3].map(c => `<option value="${c}"${b.channel === c ? ' selected' : ''}>${c}</option>`).join('')}</select><span class="d">카드 채널 (가상 버스는 1개)</span>`)}
-        ${row('MINOR FRAME', inp('minorFrameMs', b.minorFrameMs || '', 'in w80', ' placeholder="auto"') + `<span class="muted11">ms</span><span class="d">비우면 가장 짧은 메시지 주기</span>`)}
-        ${row('RT RESPONSE', inp('responseTenthUs', b.responseTenthUs, 'in w80') + `<span class="muted11">× 0.1 µs</span><span class="d">8–12 µs 응답 지연</span>`)}
-        ${row('GAP', inp('gapUs', b.gapUs, 'in w80') + `<span class="muted11">µs</span><span class="d">메시지 간격</span>`)}
-        ${row('SEED', inp('seed', b.seed, 'in w80') + `<span class="d">응답 시간 지터 시드</span>`)}
+        ${row('CHANNEL', `<select class="sel" data-f="channel">${[0, 1, 2, 3].map(c => `<option value="${c}"${b.channel === c ? ' selected' : ''}>${c}</option>`).join('')}</select><span class="d">Card channel (the virtual bus has one)</span>`)}
+        ${row('MINOR FRAME', inp('minorFrameMs', b.minorFrameMs || '', 'in w80', ' placeholder="auto"') + `<span class="muted11">ms</span><span class="d">Empty = shortest message period</span>`)}
+        ${row('RT RESPONSE', inp('responseTenthUs', b.responseTenthUs, 'in w80') + `<span class="muted11">× 0.1 µs</span><span class="d">8–12 µs response delay</span>`)}
+        ${row('GAP', inp('gapUs', b.gapUs, 'in w80') + `<span class="muted11">µs</span><span class="d">Inter-message gap</span>`)}
+        ${row('SEED', inp('seed', b.seed, 'in w80') + `<span class="d">Response-time jitter seed</span>`)}
       </div></section>
       <section class="card"><div class="card-h"><span class="t">ICD · FRAME</span><span class="m">${esc(icd.source || 'no ICD')}</span></div><div class="body-p">
         <div class="stat-row"><div><div class="k">MESSAGES</div><div class="v">${icd.messages ?? 0}</div></div><div><div class="k">WORDS</div><div class="v">${icd.words ?? 0}</div></div><div><div class="k">ERRORS</div><div class="v${icd.errors ? ' errv' : ''}">${icd.errors ?? 0}</div></div></div>

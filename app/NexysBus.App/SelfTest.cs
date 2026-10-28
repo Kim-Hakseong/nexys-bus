@@ -15,7 +15,7 @@ namespace NexysBus.App;
 public static partial class SelfTest
 {
     public static string[] Args = Array.Empty<string>();
-    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot";
+    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots";
     static readonly List<string> Log = new();
     public static string OutDir = "";
     static readonly List<string> Gate = new();
@@ -42,6 +42,7 @@ public static partial class SelfTest
             else if (Args[0] == "--v100rc") await V100(w);
             else if (Args[0] == "--v0100") await V0100(w);
             else if (Args[0] == "--stress") await Stress(w);
+            else if (Args[0] == "--uishots") await UiShots(w);
             else if (Args[0] == "--shot") { await JS(w, $"await nx.test.rail({J(Arg("--rail", "START"))}); return true;"); await Shot(w, Arg("--name", "shot")); }
         }
         catch (Exception ex) { L("FATAL " + ex); }

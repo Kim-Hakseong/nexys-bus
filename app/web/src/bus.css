@@ -95,3 +95,36 @@
 .icd-page { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .icd-page .icd-in { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .icd-page .icd-h .xbtn { display: none; }
+
+/* ---------- docs/ui-feedback.md (RUN3 T4b) ---------- */
+/* 6: bus tree navigator left of the list; RAW toggle shows the capture's channels */
+.m1553-wrap { flex: 1; display: flex; gap: 12px; min-width: 0; min-height: 0; }
+.m1553-tree { width: 260px; flex: 0 0 260px; min-height: 0; }
+.m1553-tree .card-h .pill { margin-left: 8px; }
+.m1553-tree .tree-body { padding: 6px 6px 8px; }
+.tnode { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 6px; font-size: 12px; cursor: pointer; user-select: none; }
+.tnode:hover, .tnode.sel { background: var(--panel-alt); }
+.tnode.sel .n { font-weight: 600; }
+.tnode.sa { padding-left: 26px; } .tnode.word { padding-left: 44px; height: 24px; font-size: 11px; } .tnode.grp { cursor: default; font-weight: 600; } .tnode.ch { padding-left: 26px; height: 24px; font-size: 11px; }
+.tnode .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.tnode .c { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
+.tnode .c em { font-style: normal; }
+/* 5: one filter row; actions on the panel header; time / columns behind the header menu */
+.m1553-filters { flex-wrap: nowrap; overflow-x: auto; height: 40px; min-height: 40px; box-sizing: border-box; padding: 0 12px; gap: 6px; row-gap: 0; }
+.m1553-filters .in[data-f=text] { width: 104px !important; }
+.m1553-filters::-webkit-scrollbar { height: 0; }
+.card-h .acts { display: flex; gap: 6px; margin-left: 8px; }
+.card-h .acts .pill svg { width: 12px; height: 12px; }
+.m1553-scroll .thead .hmenu { height: 20px; width: 24px; border: 0; background: transparent; color: var(--muted); padding: 0; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; justify-self: end; }
+.m1553-scroll .thead .hmenu:hover { color: var(--text); background: var(--panel); }
+.menu.hmenu-pop button .sp { width: 0; }
+.menu.hmenu-pop button:not(.on) svg { visibility: hidden; }
+/* 2: bit strings in 4-bit groups, wrapping inside the cell */
+.m1553-words td.bits, .m1553-dec .kv .bits { white-space: normal; word-break: break-word; font-family: var(--mono); line-height: 1.4; min-width: 150px; }
+/* 7: the trend card keeps its own header (word · unit · window · send); the generic chart header is hidden */
+.m1553-plot-host .chart-h { display: none; }
+.m1553-plot .card-h .acts { margin-left: 8px; }
+/* 1: ICD footer text never hides behind the buttons */
+.icd-f > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icd-f .sp { display: none; }
+.icd-f .pill { flex: 0 0 auto; }

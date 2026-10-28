@@ -1,8 +1,8 @@
 ; NexysBus — Inno Setup script. Build: ISCC.exe installer\NexysBus.iss
 ; Input: ..\bus\dist\app\* (dotnet publish, self-contained win-x64), bootstrapper MicrosoftEdgeWebview2Setup.exe in installer\redist\
 #define MyAppName "NexysBus"
-#define MyAppVersion "0.1.0-beta"
-#define MyAppVersionText "0.1.0 beta"
+#define MyAppVersion "0.1.0-beta.2"
+#define MyAppVersionText "0.1.0 beta.2"
 #define MyAppPublisher "Nexys"
 #define MyAppExeName "NexysBus.exe"
 #define MyAppUrl "https://github.com/Kim-Hakseong/nexys-bus"
