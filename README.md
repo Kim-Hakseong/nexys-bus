@@ -4,19 +4,19 @@
 
 **MIL-STD-1553 버스 시뮬레이션 · 캡처 분석 · ICD — 가상 버스로 지금 바로, 하드웨어 카드는 드라이버가 있는 PC에서 같은 화면으로.**
 
-![version](https://img.shields.io/badge/version-0.2.0--beta.1-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
+![version](https://img.shields.io/badge/version-0.2.0--beta.2-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
 
 C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-core](https://github.com/Kim-Hakseong/nexys-core) submodule
 
-> ⚠️ 0.2.0 beta.1. 앱 이름은 임시이고(결정 항목), 하드웨어 카드 지원은 **드라이버 바인딩(driver.json) + SEARCH HARDWARE + `HardwareBusDevice`**까지 들어갔지만 실카드 실측은 아직 0회(가짜 드라이버 계약 테스트 5개와 드라이버 라이브러리 바인딩만 확인, `--hw` 셀프테스트가 현장 절차). 모든 수치는 가상 버스·가상 데이터 기준. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
+> ⚠️ 0.2.0 beta.2(= beta.1 + 저장소 소스의 .dxd 탐색 수정, 내보내기 관문 강화). 앱 이름은 임시이고(결정 항목), 하드웨어 카드 지원은 **드라이버 바인딩(driver.json) + SEARCH HARDWARE + `HardwareBusDevice`**까지 들어갔지만 실카드 실측은 아직 0회(가짜 드라이버 계약 테스트 5개와 드라이버 라이브러리 바인딩만 확인, `--hw` 셀프테스트가 현장 절차). 모든 수치는 가상 버스·가상 데이터 기준. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
 
 [![SIMULATE](docs/images/simulate.png)](docs/images/simulate.png)
 
 * * *
 
 ## 설치와 실행
-- **설치형**: [Releases](https://github.com/Kim-Hakseong/nexys-bus/releases)의 `NexysBus-0.2.0-beta.1-setup.exe`. Program Files에 설치, `.nxb`/`.mon` 연결은 선택(기본 해제). WebView2 런타임이 없으면 설치 중 받는다.
-- **포터블**: `NexysBus-0.2.0-beta.1-portable.exe` 1개. 첫 실행은 `%TEMP%\.net\NexysBus\`에 풀리느라 5–12 s, 이후 약 2 s.
+- **설치형**: [Releases](https://github.com/Kim-Hakseong/nexys-bus/releases)의 `NexysBus-0.2.0-beta.2-setup.exe`. Program Files에 설치, `.nxb`/`.mon` 연결은 선택(기본 해제). WebView2 런타임이 없으면 설치 중 받는다.
+- **포터블**: `NexysBus-0.2.0-beta.2-portable.exe` 1개. 첫 실행은 `%TEMP%\.net\NexysBus\`에 풀리느라 5–12 s, 이후 약 2 s.
 - **소스**: `git clone --recurse-submodules` → `cd app/web && npm install && npm run build` → `dotnet build app/NexysBus.App/NexysBus.App.csproj -c Release` → `app\NexysBus.App\bin\Release\net8.0-windows\win-x64\NexysBus.exe`
 
 ## 화면 (왼쪽 레일)
