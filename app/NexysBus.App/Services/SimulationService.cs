@@ -32,7 +32,7 @@ public sealed class SimulationService
             var cfg = _e.Project.ToConfig();
             if (cfg.Messages.Count(m => m.Enabled) == 0) { _e.SetStatus("Nothing to run: load an ICD (ICD rail) or import a simulator project first"); return; }
             _dev?.Dispose();
-            _dev = _e.Project.Device == "virtual" ? new VirtualBusDevice { ManualClock = manualClock } : new HardwareBusDevice(_e.Project.Device);
+            _dev = _e.Project.Device == "virtual" ? new VirtualBusDevice { ManualClock = manualClock } : new HardwareBusDevice(BusEngine.CardIndex(_e.Project.Device), _e.Driver, channel: _e.Project.Bus.Channel);
             _dev.Open(); _dev.Configure(cfg);
             Directory.CreateDirectory(CaptureDir);
             _path = Path.Combine(CaptureDir, $"{San(_e.Project.Name)}_{DateTime.Now:yyyyMMdd_HHmmss}_{++_seq:00}.mon");   // unique per run (two runs inside one second must not share a file / DataFile name)

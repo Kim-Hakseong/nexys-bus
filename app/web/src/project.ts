@@ -20,7 +20,7 @@ export class ProjectPage {
     });
   }
   setState(S: any) {
-    const p = S.project ?? {}; const devs: any[] = S.devices ?? []; const key = JSON.stringify([p, devs]); if (key === this.key) return; this.key = key;
+    const p = S.project ?? {}; const devs: any[] = S.devices ?? []; const drv: any = S.driver ?? { bound: false, path: '', searched: false, cards: 0 }; const key = JSON.stringify([p, devs, drv]); if (key === this.key) return; this.key = key;
     const b = p.bus ?? {}; const icd = p.icd ?? {};
     const row = (k: string, body: string) => `<div class="row2"><span class="k">${k}</span>${body}</div>`;
     const inp = (f: string, v: any, cls = 'in', extra = '') => `<input class="${cls}" data-f="${f}" value="${esc(v ?? '')}"${extra}>`;
@@ -32,8 +32,8 @@ export class ProjectPage {
       </div></section>
       <section class="card"><div class="card-h"><span class="t">DEVICE</span><span class="m">${devs.filter(d => d.available).length} available</span></div><div class="body-p"><div class="dev-list">
         ${devs.map(d => `<div class="dev${d.id === p.device ? ' on' : ''}${d.available ? '' : ' off'}" data-dev="${esc(d.id)}"><span class="ic">${d.kind === 'virtual' ? '▣' : '▢'}</span><div><div class="nm">${esc(d.name)}</div><div class="dt">${esc(d.detail)}</div></div><span class="chip">${d.id === p.device ? 'SELECTED' : d.available ? 'AVAILABLE' : 'UNAVAILABLE'}</span></div>`).join('')}
-        ${devs.some(d => d.kind === 'hardware') ? '' : `<div class="dev off" data-dev="hw"><span class="ic">▢</span><div><div class="nm">1553 card (driver)</div><div class="dt">no cards found — hardware support comes with the driver</div></div><span class="chip">UNAVAILABLE</span></div>`}
-      </div>${row('', `<button class="pill h24" data-a="searchHw"${devs.some(d => d.kind === 'hardware') ? '' : ' disabled'}>SEARCH HARDWARE</button><span class="d">Enabled on a PC with a driver card</span>`)}</div></section>
+        ${devs.some(d => d.kind === 'hardware') ? '' : `<div class="dev off" data-dev="hw"><span class="ic">▢</span><div><div class="nm">1553 card (driver)</div><div class="dt">${drv.bound ? (drv.searched ? 'the driver reports no card — check the card, then SEARCH HARDWARE again' : 'driver binding found — press SEARCH HARDWARE') : 'no driver binding on this PC (driver.json next to the exe or in %LOCALAPPDATA%\\NexysBus)'}</div></div><span class="chip">UNAVAILABLE</span></div>`}
+      </div>${row('', `<button class="pill h24" data-a="searchHw"${drv.bound ? '' : ' disabled'}>SEARCH HARDWARE</button><span class="d">${drv.bound ? esc('Binding: ' + drv.path) : 'Enabled when a driver binding (driver.json) is present'}</span>`)}</div></section>
       <section class="card"><div class="card-h"><span class="t">BUS</span><span class="m">channel ${b.channel ?? 0} · 1553B</span></div><div class="body-p">
         ${row('CHANNEL', `<select class="sel" data-f="channel">${[0, 1, 2, 3].map(c => `<option value="${c}"${b.channel === c ? ' selected' : ''}>${c}</option>`).join('')}</select><span class="d">Card channel (the virtual bus has one)</span>`)}
         ${row('MINOR FRAME', inp('minorFrameMs', b.minorFrameMs || '', 'in w80', ' placeholder="auto"') + `<span class="muted11">ms</span><span class="d">Empty = shortest message period</span>`)}

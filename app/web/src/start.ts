@@ -14,10 +14,10 @@ export class StartPage {
     });
   }
   setState(S: any) {
-    const recent: any[] = S.recent ?? []; const hw = (S.devices ?? []).some((d: any) => d.kind === 'hardware' && d.available);
+    const recent: any[] = S.recent ?? []; const hw = (S.devices ?? []).some((d: any) => d.kind === 'hardware' && d.available); const bound = !!(S.driver && S.driver.bound);
     const key = JSON.stringify([recent, hw, S.app?.versionText]); if (key === this.last) return; this.last = key;
     this.el.querySelector('.start-in')!.innerHTML = `<h1>${esc(S.app?.name || 'NexysBus')}<small>MIL-STD-1553 bus simulation · capture analysis · ICD — on the virtual bus right now, on a hardware card where the driver is installed.</small></h1>
-      <div class="actions"><button class="pill h32 primary" data-a="newProject">${I.file(15)}NEW PROJECT</button><button class="pill h32" data-a="openProject">${I.folder(15)}OPEN PROJECT…</button><button class="pill h32" data-a="searchHw"${hw ? '' : ' disabled'} title="${hw ? '' : 'Enabled on a PC with a driver card'}">${I.search(15)}SEARCH HARDWARE</button><div class="note">${hw ? 'Hardware cards found — pick one in PROJECT.' : 'Hardware search is enabled on a PC with a driver card. Build and run a frame on the virtual bus meanwhile.'}</div></div>
+      <div class="actions"><button class="pill h32 primary" data-a="newProject">${I.file(15)}NEW PROJECT</button><button class="pill h32" data-a="openProject">${I.folder(15)}OPEN PROJECT…</button><button class="pill h32" data-a="searchHw"${bound ? '' : ' disabled'} title="${bound ? '' : 'Enabled when a driver binding (driver.json) is present'}">${I.search(15)}SEARCH HARDWARE</button><div class="note">${hw ? 'Hardware cards found — pick one in PROJECT.' : bound ? 'Driver binding found — SEARCH HARDWARE lists the cards the driver reports.' : 'Hardware search is enabled on a PC with a driver binding (driver.json). Build and run a frame on the virtual bus meanwhile.'}</div></div>
       <div class="recent"><div class="lblh">RECENT PROJECTS</div>${recent.length ? recent.map(r => `<button data-path="${esc(r.path)}" title="${esc(r.path)}"><b>${esc(r.name)}</b><span>${esc(r.path)}</span></button>`).join('') : '<div class="faint11">None yet — start with NEW PROJECT and SAVE it as an .nxb file.</div>'}</div>`;
   }
 }

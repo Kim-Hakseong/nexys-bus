@@ -74,7 +74,7 @@ function showAbout() {
   if (!S || document.querySelector('.about')) return; const a = S.app ?? {};
   const dlg = h(`<div class="modal-bg"><div class="modal about"><div style="display:flex;align-items:center;gap:10px"><img src="brand/Logo.png" alt="" style="height:18px"><span class="ver">${esc(a.versionText || '')}</span></div>
     <div class="ttl">${esc(a.name || 'NexysBus')} — MIL-STD-1553 bus simulation and capture analysis</div>
-    <p>${a.beta ? 'Pre-release build: the product name and screens may change, and hardware card support is the next step. Please report problems through the feedback link below.' : ''}</p>
+    <p>${a.beta ? 'Pre-release build: the product name and screens may change, and hardware card support (driver binding + SEARCH HARDWARE) awaits its first measurement on a PC with a card. Please report problems through the feedback link below.' : ''}</p>
     <p>Feedback: <a href="#" data-url="${esc(a.issues || '')}" style="color:var(--accent2);text-decoration:underline">GitHub Issues</a> · Repository: <a href="#" data-url="${esc(a.repo || '')}" style="color:var(--accent2);text-decoration:underline">${esc(a.repo || '')}</a></p>
     <div class="btns"><button class="pill h30 primary" data-b="ok">CLOSE</button></div></div></div>`);
   dlg.addEventListener('click', e => { const t = e.target as HTMLElement; const u = (t.closest('[data-url]') as HTMLElement | null)?.dataset.url; if (u) { e.preventDefault(); bridge.call('openUrl', { url: u }); return; } if ((t.closest('[data-b]') as HTMLElement | null)?.dataset.b === 'ok' || t === dlg) dlg.remove(); });

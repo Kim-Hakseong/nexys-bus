@@ -160,3 +160,10 @@
 .run .stat4 > div { min-width: 0; overflow: hidden; }
 .run .stat4 .v { flex-wrap: wrap; }
 .run .stat4 .exp { flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+/* RUN4 U5: ICD EDIT message table — BUS column and the delete button stay inside the pane (narrower name / select cells) */
+.icd-page .icd-pane.msgs { flex: 0 0 560px !important; }
+.icd-tbl.edit input.cell[data-f=name] { width: 96px !important; }
+.icd-tbl.edit select.cell[data-f=tr] { width: 76px; }
+.icd-tbl.edit td, .icd-tbl.edit th { padding: 0 6px; }
+.icd-tbl.edit input.cell { width: 34px; }
+.icd-tbl.edit input.cell[data-f=period_ms] { width: 44px; }

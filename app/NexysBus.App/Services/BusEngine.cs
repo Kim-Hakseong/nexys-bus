@@ -19,7 +19,7 @@ public sealed class BusEngine : EngineBase
 
     public BusEngine()
     {
-        Mode = "START"; Sim = new SimulationService(this);
+        Mode = "START"; Sim = new SimulationService(this); Driver = DriverBinding.Load(DriverBinding.DefaultCandidates("NexysBus"));
         Mil1553.SetHub(Project.Icd, "(project)");
         Mil1553.HubChanged += hub => { if (!ReferenceEquals(hub, Project.Icd)) { Project.SetIcd(hub); Dirty = true; } Touch(); };
     }
@@ -108,13 +108,27 @@ public sealed class BusEngine : EngineBase
         Dirty = true; Touch();
     }
 
-    /// <summary>Devices offered in PROJECT: the virtual bus always, hardware cards when the driver reports any (hardware day).</summary>
+    /// <summary>Driver binding of this PC (driver.json next to the exe or under %LOCALAPPDATA%\NexysBus); null = no hardware on this PC.</summary>
+    public DriverBinding? Driver { get; private set; }
+    List<DeviceInfo> _cards = new(); bool _searched;
+    /// <summary>Devices offered in PROJECT: the virtual bus always, then the cards the driver reported on the last search (ids hw0, hw1 …).</summary>
     public List<object> Devices()
     {
         var l = new List<object> { new { id = "virtual", kind = "virtual", name = "Virtual bus", detail = "software BC + simulated RTs + monitor", available = true } };
-        foreach (var d in HardwareBusDevice.Enumerate()) l.Add(new { id = d.Name, kind = d.Kind, name = d.Name, detail = d.Detail, available = false });
+        for (int i = 0; i < _cards.Count; i++) l.Add(new { id = $"hw{i}", kind = _cards[i].Kind, name = _cards[i].Name, detail = _cards[i].Detail, available = true });
         return l;
     }
+    /// <summary>SEARCH HARDWARE: reload the binding file, enumerate the cards through the driver (empty without a binding), report in the status line.</summary>
+    public List<object> SearchHardware()
+    {
+        Driver = DriverBinding.Load(DriverBinding.DefaultCandidates("NexysBus")); _searched = true;
+        _cards = Driver == null ? new List<DeviceInfo>() : HardwareBusDevice.Enumerate(Driver, maxCards: Math.Clamp(Driver.MaxCards, 1, 16)).ToList();
+        SetStatus(Driver == null ? "Hardware search: no driver binding on this PC (driver.json next to the exe or in %LOCALAPPDATA%\\NexysBus) — the virtual bus stays available"
+            : _cards.Count == 0 ? (HardwareBusDevice.LastEnumerateError.Length > 0 ? "Hardware search: " + HardwareBusDevice.LastEnumerateError : $"Hardware search: the driver ({Path.GetFileName(Driver.CardLibrary)}) reports no card") : $"Hardware search: {_cards.Count} card(s) — pick one in PROJECT › DEVICE");
+        if (_cards.Count == 0 && Project.Device != "virtual") { Project.Device = "virtual"; Dirty = true; }
+        Touch(); return Devices();
+    }
+    public static int CardIndex(string device) => device.StartsWith("hw") && int.TryParse(device.AsSpan(2), out int n) ? n : 0;
 
     // ------------------------------------------------------------------ bridge commands of this application
     public bool Dispatch(string cmd, JsonElement r, out object? result)
@@ -131,7 +145,7 @@ public sealed class BusEngine : EngineBase
             case "project.exportSimTo": result = ExportSimulator(Bridge.S(r, "dir"), Bridge.SL(r, "formats") is { Count: > 0 } fm ? fm.ToArray() : null); return true;
             case "project.useIcd": if (Mil1553.Hub != null) { Project.SetIcd(Mil1553.Hub); Dirty = true; Touch(); } return true;
             case "project.close": Sim.Stop(); Project = new BusProject(); Mil1553.SetHub(Project.Icd, "(project)"); Dirty = false; Mode = "START"; Touch(); return true;
-            case "devices.search": SetStatus("Hardware search: no driver cards found on this PC (hardware support is scheduled for the hardware day)"); result = Devices(); return true;
+            case "devices.search": result = SearchHardware(); return true;
             case "sim.schedule.set": SetSchedule(Bridge.S(r, "message"), Bridge.S(r, "field"), r.GetProperty("value")); return true;
             case "sim.move": MoveSchedule(Bridge.S(r, "message"), Bridge.I(r, "dir", 1)); return true;
             case "sim.source.set": SetSource(Bridge.S(r, "message"), Bridge.S(r, "field"), r.GetProperty("value")); return true;
@@ -148,7 +162,7 @@ public sealed class BusEngine : EngineBase
     protected override void ExtendSnapshot(Dictionary<string, object?> s)
     {
         s["rail"] = Mode; s["recent"] = Recent.Where(File.Exists).Select(p => new { path = p, name = Path.GetFileNameWithoutExtension(p), dir = Path.GetDirectoryName(p) }).ToList();
-        s["devices"] = Devices(); s["project"] = ProjectDto(); s["sim"] = Sim.Dto();
+        s["devices"] = Devices(); s["driver"] = new { bound = Driver != null, path = Driver?.Path ?? "", searched = _searched, cards = _cards.Count }; s["project"] = ProjectDto(); s["sim"] = Sim.Dto();
     }
 
     object ProjectDto()
