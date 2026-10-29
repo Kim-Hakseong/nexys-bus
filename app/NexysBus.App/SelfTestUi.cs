@@ -40,4 +40,33 @@ public static partial class SelfTest
         await S(10, "simulate-language");
         L("uishots done " + pre);
     }
+
+    /// <summary>--uishots2 --prefix before|after: docs/ui-feedback-2.md scenes (ICD export formats, decode EU column, ICD edit BUS column,
+    /// PROJECT buttons / hints, start button, dark SIMULATE accents, SETTINGS layout, RUN panel expected load).</summary>
+    static async Task UiShots2(MainWindow w)
+    {
+        var e = w.Engine; string pre = Arg("--prefix", "after"); string dir = Path.Combine(OutDir, "data"); Directory.CreateDirectory(dir);
+        e.Theme = "light"; e.Plot = "dark"; e.BusTime = "rel"; e.Touch();
+        async Task S(int n, string name) { await Shot(w, $"ui2-{n:00}-{pre}-{name}"); }
+        await JS(w, "await nx.test.rail('START'); return true;"); await Idle(w, 250);
+        await S(4, "start-button");
+        e.NewProject("UI feedback 2"); string hubCsv = Path.Combine(dir, "dummy_icd.csv"); File.WriteAllText(hubCsv, IcdHub.Dummy().ToCsv()); e.Mil1553.LoadIcd(hubCsv);
+        await JS(w, "await nx.test.rail('PROJECT'); return true;"); await Idle(w, 250);
+        await S(5, "project-hints");
+        await JS(w, "await nx.test.icd().open('export'); return true;"); await Idle(w, 300);
+        await S(1, "icd-export-formats");
+        await JS(w, "await nx.test.icd().open('edit'); return true;"); await Idle(w, 250);
+        await S(3, "icd-edit-bus-column");
+        await JS(w, "await nx.test.rail('ANALYZE'); await nx.test.clickSel('.bus-empty [data-a=sample1553]'); await nx.test.settle(); return true;"); await Idle(w, 400);
+        await JS(w, "await nx.test.m1553().scrollTo(0); const r = document.querySelector('.m1553-scroll .trow[data-i]'); await nx.test.m1553().selectRow(+r.dataset.row); return true;"); await Idle(w, 250);
+        await S(2, "decode-eu-column");
+        await JS(w, "await nx.test.rail('SETTINGS'); return true;"); await Idle(w, 250);
+        await S(7, "settings-layout");
+        await JS(w, "await nx.test.rail('SIMULATE'); return true;"); await Idle(w, 250);
+        await S(8, "run-panel-expected");
+        e.Theme = "dark"; e.Touch(); await JS(w, "await nx.test.settle(); return true;"); await Idle(w, 250);
+        await S(6, "dark-simulate-accents");
+        e.Theme = "light"; e.Touch();
+        L("uishots2 done " + pre);
+    }
 }

@@ -128,3 +128,35 @@
 .icd-f > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icd-f .sp { display: none; }
 .icd-f .pill { flex: 0 0 auto; }
+
+/* ---------- docs/ui-feedback-2.md (beta.3) ---------- */
+/* 1: EXPORT formats as blocks (the .modal.icd rules did not reach the page) */
+.icd-page .opt { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+.icd-page .opt:last-of-type { border-bottom: 0; }
+.icd-page .opt span > span { display: block; margin-top: 2px; }
+.icd-page .opt input { margin-top: 2px; }
+/* 2: MESSAGE : TREND = 55 : 45, bit groups on two lines, EU never clipped */
+.m1553-dec { flex: 55 1 0 !important; min-width: 0; }
+.m1553-plot { flex: 45 1 0 !important; min-width: 0; }
+.m1553-words td.bits { min-width: 120px; max-width: 160px; }
+.m1553-words td.eu { white-space: nowrap; }
+.m1553-words th:last-child, .m1553-words td:last-child { padding-right: 10px; }
+/* 3: ICD EDIT BUS / T/R selects wide enough; PROJECT action rows wrap instead of clipping */
+.icd-tbl select.cell[data-f=bus] { width: 48px; } .icd-tbl select.cell[data-f=tr] { width: 84px; }
+.project .row2 { flex-wrap: wrap; row-gap: 6px; } .project .row2 .pill { flex: 0 0 auto; }
+/* 4: the primary start button keeps its on-accent text (the actions rule forced --text) */
+.start .actions .pill.primary { color: var(--on-accent); }
+/* 6: one accent per theme — minor-frame cells use accent2 in light, the theme accent in dark */
+:root[data-theme="dark"] .frame-vis .lane .cells i.on { background: var(--accent); }
+:root[data-theme="dark"] .frame-vis .lane.off .cells i.on { background: var(--border-strong); }
+/* 7: SETTINGS as cards (same grid as PROJECT) */
+.project.settings .card .body-p { gap: 6px; }
+.project.settings .row { display: flex; align-items: center; gap: 8px; min-height: 26px; font-size: 12px; flex-wrap: wrap; }
+.project.settings .row .d { margin-left: auto; color: var(--muted); font-size: 11px; text-align: right; max-width: 280px; }
+.project.settings .row .in { height: 24px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--panel); font: 11px var(--mono); color: var(--text); padding: 0 8px; flex: 1; min-width: 160px; }
+/* 8: expected bus load under the measured value */
+.run .stat4 .exp { display: block; font: 10px var(--mono); color: var(--faint); margin-top: 3px; white-space: nowrap; }
+/* 8b: the expected value sits on its own line inside the BUS LOAD tile (never overlaps the next tile) */
+.run .stat4 > div { min-width: 0; overflow: hidden; }
+.run .stat4 .v { flex-wrap: wrap; }
+.run .stat4 .exp { flex: 1 0 100%; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }

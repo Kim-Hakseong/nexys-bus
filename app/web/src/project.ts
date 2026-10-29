@@ -43,7 +43,7 @@ export class ProjectPage {
       </div></section>
       <section class="card"><div class="card-h"><span class="t">ICD · FRAME</span><span class="m">${esc(icd.source || 'no ICD')}</span></div><div class="body-p">
         <div class="stat-row"><div><div class="k">MESSAGES</div><div class="v">${icd.messages ?? 0}</div></div><div><div class="k">WORDS</div><div class="v">${icd.words ?? 0}</div></div><div><div class="k">ERRORS</div><div class="v${icd.errors ? ' errv' : ''}">${icd.errors ?? 0}</div></div></div>
-        ${row('', `<button class="pill h24 primary" data-a="icd">ICD →</button><button class="pill h24" data-a="simulate">SIMULATE →</button><button class="pill h24" data-a="importSim">IMPORT SIMULATOR PROJECT…</button><button class="pill h24" data-a="exportSim"${icd.messages ? '' : ' disabled'}>EXPORT SIMULATOR PROJECT…</button>`)}
+        ${row('', `<button class="pill h24 primary" data-a="icd">ICD →</button><button class="pill h24" data-a="simulate">SIMULATE →</button><button class="pill h24" data-a="importSim" title="Import a simulator project (compound document)">IMPORT PROJECT…</button><button class="pill h24" data-a="exportSim"${icd.messages ? '' : ' disabled'} title="Export as a simulator project (template folder from SETTINGS)">EXPORT PROJECT…</button>`)}
         ${row('TEMPLATE', `<span class="mono muted11" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.templateDir || '(none — project files are skipped on export)')}</span><span class="d"><button class="pill h24" data-a="settings">SETTINGS</button></span>`)}
       </div></section>`;
   }

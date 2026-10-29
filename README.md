@@ -4,19 +4,19 @@
 
 **MIL-STD-1553 버스 시뮬레이션 · 캡처 분석 · ICD — 가상 버스로 지금 바로, 하드웨어 카드는 드라이버가 있는 PC에서 같은 화면으로.**
 
-![version](https://img.shields.io/badge/version-0.1.0--beta.2-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
+![version](https://img.shields.io/badge/version-0.1.0--beta.3-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
 
 C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-core](https://github.com/Kim-Hakseong/nexys-core) submodule
 
-> ⚠️ 0.1.0 beta.2. 앱 이름은 임시이고(결정 항목), 하드웨어 카드 지원은 다음 단계다(`HardwareBusDevice`는 서명만). 모든 수치는 가상 버스·가상 데이터 기준. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
+> ⚠️ 0.1.0 beta.3. 앱 이름은 임시이고(결정 항목), 하드웨어 카드 지원은 다음 단계다(`HardwareBusDevice`는 서명만). 모든 수치는 가상 버스·가상 데이터 기준. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
 
 [![SIMULATE](docs/images/simulate.png)](docs/images/simulate.png)
 
 * * *
 
 ## 설치와 실행
-- **설치형**: [Releases](https://github.com/Kim-Hakseong/nexys-bus/releases)의 `NexysBus-0.1.0-beta.2-setup.exe`. Program Files에 설치, `.nxb`/`.mon` 연결은 선택(기본 해제). WebView2 런타임이 없으면 설치 중 받는다.
-- **포터블**: `NexysBus-0.1.0-beta.2-portable.exe` 1개. 첫 실행은 `%TEMP%\.net\NexysBus\`에 풀리느라 5–12 s, 이후 약 2 s.
+- **설치형**: [Releases](https://github.com/Kim-Hakseong/nexys-bus/releases)의 `NexysBus-0.1.0-beta.3-setup.exe`. Program Files에 설치, `.nxb`/`.mon` 연결은 선택(기본 해제). WebView2 런타임이 없으면 설치 중 받는다.
+- **포터블**: `NexysBus-0.1.0-beta.3-portable.exe` 1개. 첫 실행은 `%TEMP%\.net\NexysBus\`에 풀리느라 5–12 s, 이후 약 2 s.
 - **소스**: `git clone --recurse-submodules` → `cd app/web && npm install && npm run build` → `dotnet build app/NexysBus.App/NexysBus.App.csproj -c Release` → `app\NexysBus.App\bin\Release\net8.0-windows\win-x64\NexysBus.exe`
 
 ## 화면 (왼쪽 레일)
@@ -24,12 +24,12 @@ C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-c
 |---|---|
 | **시작** | NEW PROJECT · OPEN PROJECT… · SEARCH HARDWARE(드라이버 카드가 있는 PC에서 활성) · 최근 프로젝트 |
 | **PROJECT** | 이름·파일(.nxb JSON)·캡처 폴더 · 장치(Virtual bus / 드라이버 카드) · 버스 설정(채널·마이너 프레임·RT 응답·갭·시드) · ICD 요약 + **시뮬레이터 프로젝트 가져오기/내보내기**(복합문서) |
-| **SIMULATE** | **FRAME** 표(순서 ▲▼·ON·주기 ms → EVERY = 몇 번째 마이너 프레임마다) + 메이저 프레임 안 배치 격자 · **SIMULATED RT DATA**(메시지별 데이터 소스: eu = 각 워드 범위의 사인을 scale·offset 역변환, sine·ramp·const) · **RUN**(START/STOP 실시간, 10 s BATCH 즉시 생성, 메시지·오류·버스 로드·A/B·RT별, **ERROR INJECTION** 무응답·패리티·워드카운트 every N) |
+| **SIMULATE** | **RUN**에 프레임 표 기준 expected bus load 상시 표시 · **FRAME** 표(순서 ▲▼·ON·주기 ms → EVERY = 몇 번째 마이너 프레임마다) + 메이저 프레임 안 배치 격자 · **SIMULATED RT DATA**(메시지별 데이터 소스: eu = 각 워드 범위의 사인을 scale·offset 역변환, sine·ramp·const) · **RUN**(START/STOP 실시간, 10 s BATCH 즉시 생성, 메시지·오류·버스 로드·A/B·RT별, **ERROR INJECTION** 무응답·패리티·워드카운트 every N) |
 | **ANALYZE** | **BUS TREE**(RT → SA(T/R) → ICD 워드, 노드마다 메시지·오류 수; RAW 토글은 채널 목록) · 실행 중 캡처가 실시간으로 쌓이는 리스트(100만 건 가상 스크롤) · CAPTURE 칩 · 한 줄 필터(RT/SA/T·R/BUS/ERRORS ONLY/TEXT/PRESET) · 머리글 ⋯ 메뉴(시간 표시 REL/ABS µs(상위 32비트 미확정 툴팁)/Δ, 열 선택) · 패널 헤더 CSV / CSV·EU / STATS · ERR 열은 오류 비트만(HIT는 STAT 열, 기본 숨김) · 디코드(hex · 4비트 묶음 비트 · EU) · 추이 카드(워드·단위 · LAST 10 s / 60 s / ALL · SEND TO VIEW) · 통계. ARINC 429 캡처도 같은 화면 |
 | **ICD** | IMPORT(CSV/XLSX 열 매핑·허브 JSON·메시지 XML) · EDIT(표 편집·검증: 비트 겹침 error, 중복 warning) · EXPORT(시뮬레이터 프로젝트·메시지 XML·커스텀 디바이스 XML·자동화 스크립트, XSD + 재판독). 가져온 ICD는 곧바로 프로젝트의 프레임이 된다 |
 | **SETTINGS** | 테마·플롯 · ANALYZE 시간 표시 · 템플릿 프로젝트 폴더(시뮬레이터 내보내기용, RT/SA 노드가 있는 템플릿) · 캡처 폴더 · 설정 파일(`%LOCALAPPDATA%\NexysBus\settings.json`) |
 
-## 수치 (0.1.0-beta.2, 가상 버스, 셀프테스트 `--bus` 측정)
+## 수치 (0.1.0-beta.3, 가상 버스, 셀프테스트 `--bus` 측정)
 | 항목 | 값 | 기준 |
 |---|---|---|
 | 시작 → 페이지 준비 | 2.4 s | ≤ 3 s |
@@ -42,10 +42,10 @@ C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-c
 | 템플릿 가져오기 → 내보내기 → 다시 가져오기 | 비트 범위·타입·scale 동일(프로젝트 파일에는 offset/unit이 없음) | — |
 | 설정 4절 · 도움말 7절 · 정보 창 타사 이름 0 · accent 테두리 0 · 종료 WS 211 MB | — | ≤ 600 MB |
 
-뷰어에서 옮겨 온 BUS/ICD 관문(`--v100rc` 31 관문 + UI 피드백 관문 12, `--v0100` 1M 레코드 성능)도 그대로 통과한다 — [docs/bus-report.md](docs/bus-report.md). beta.2는 UI 피드백 10항목(ERR/STAT 분리, ABS 시간 툴팁, 한 줄 필터 바, BUS TREE, 추이 카드 헤더, 비트 묶음, ICD 푸터, 개발자 전용 DUMMY, 내부 식별자 제거, 영문 UI)을 반영했다.
+뷰어에서 옮겨 온 BUS/ICD 관문(`--v100rc` 31 관문 + UI 피드백 관문 12, `--v0100` 1M 레코드 성능)도 그대로 통과한다 — [docs/bus-report.md](docs/bus-report.md). beta.2는 UI 피드백 10항목(ERR/STAT 분리, ABS 시간 툴팁, 한 줄 필터 바, BUS TREE, 추이 카드 헤더, 비트 묶음, ICD 푸터, 개발자 전용 DUMMY, 내부 식별자 제거, 영문 UI)을, beta.3은 피드백 2의 8항목(EXPORT 블록, EU 열 55:45, BUS 열·버튼 폭, 시작 버튼 라벨, 영문 관문 확장, 다크 강조색 1종, SETTINGS 카드, RUN expected load)을 반영했다.
 
 ## 자동화
-`NexysBus.exe --bus --out <dir> [--template <folder>] --forbid a,b,c`(사용자 경로 전체), `--v100rc --out <dir> [--xlsx <file>] [--template <folder>] --forbid …`(ANALYZE·ICD + UI 피드백 관문), `--v0100 --out <dir> [--truth <mon>]`, `--stress --iter 50`, `--uishots --out <dir> --prefix before|after`(피드백 10장면 캡처), `--shot --rail SIMULATE --name x`. UI는 영문, 도움말(F1)만 한글. `Ctrl+Shift+D` 개발자 모드(ICD 푸터 DUMMY).
+`NexysBus.exe --bus --out <dir> [--template <folder>] --forbid a,b,c`(사용자 경로 전체), `--v100rc --out <dir> [--xlsx <file>] [--template <folder>] --forbid …`(ANALYZE·ICD + UI 피드백 관문), `--v0100 --out <dir> [--truth <mon>]`, `--stress --iter 50`, `--uishots --out <dir> --prefix before|after`(피드백 10장면 캡처), `--uishots2 …`(피드백 2의 8장면), `--shot --rail SIMULATE --name x`. UI는 영문, 도움말(F1)만 한글. `Ctrl+Shift+D` 개발자 모드(ICD 푸터 DUMMY).
 
 ## 파일
 - `.nxb` 프로젝트(JSON, 버전 1): device · bus · icd(허브 스키마 1.0) · schedule · sources · errors · captureDir.

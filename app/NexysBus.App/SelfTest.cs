@@ -15,7 +15,7 @@ namespace NexysBus.App;
 public static partial class SelfTest
 {
     public static string[] Args = Array.Empty<string>();
-    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots";
+    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2";
     static readonly List<string> Log = new();
     public static string OutDir = "";
     static readonly List<string> Gate = new();
@@ -43,6 +43,7 @@ public static partial class SelfTest
             else if (Args[0] == "--v0100") await V0100(w);
             else if (Args[0] == "--stress") await Stress(w);
             else if (Args[0] == "--uishots") await UiShots(w);
+            else if (Args[0] == "--uishots2") await UiShots2(w);
             else if (Args[0] == "--shot") { await JS(w, $"await nx.test.rail({J(Arg("--rail", "START"))}); return true;"); await Shot(w, Arg("--name", "shot")); }
         }
         catch (Exception ex) { L("FATAL " + ex); }
@@ -105,6 +106,8 @@ public static partial class SelfTest
         string capture = run.GetProperty("capture").GetString() ?? ""; var df = e.State.Files.FirstOrDefault(f => f.Path == capture); var cap = df != null ? Mil1553DataSource.FileOf(df) : null;
         var st = JsonDocument.Parse(JsonSerializer.Serialize(e.Mil1553.Stats())).RootElement; double loadStats = st.GetProperty("busLoadPct").GetDouble();
         GB("sim_bus_load_matches_stats", cap != null && cap.Count == got && Math.Abs(loadDev - loadStats) < 0.01 && st.GetProperty("count").GetInt64() == got, $"device load={loadDev:F3} % stats load={loadStats:F3} % records={cap?.Count} stats count={st.GetProperty("count")}");
+        double expLoad = (await JS(w, "return nx.test.sim().expectedLoad();")).GetDouble();
+        GB("ui2_8_expected_load_matches_run", expLoad > 0 && Math.Abs(expLoad - loadDev) <= 0.2, $"frame-table expected={expLoad:F3} % run measured={loadDev:F3} % (|Δ| ≤ 0.2 %p; no-response messages carry no data words)");
         GB("sim_capture_file_written", File.Exists(capture) && new FileInfo(capture).Length == cap!.Metadata.Length + 8 + (long)cap.Count * Mil1553File.RecordSize, $"{capture} {new FileInfo(capture).Length} B");
         // ---- 6) live run through the START/STOP buttons (wall clock, 1.2 s) → ANALYZE list grows while running
         await JS(w, "await nx.test.clickSel('.simulate [data-a=start]'); return true;"); await Idle(w, 600);

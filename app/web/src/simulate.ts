@@ -10,7 +10,7 @@ export class SimulatePage {
   el = h(`<div class="simulate"><section class="card frame"><div class="card-h"><span class="t">FRAME</span><span class="m" data-m></span></div><div class="scroll"><table class="frame-tbl"><thead><tr><th>#</th><th>ON</th><th>MESSAGE</th><th>RT</th><th>SA</th><th>T/R</th><th>WC</th><th>PERIOD ms</th><th>EVERY</th><th>BUS</th></tr></thead><tbody></tbody></table></div><div class="frame-vis"></div></section>
     <section class="card run"><div class="card-h"><span class="t">RUN</span><span class="m" data-rm></span></div><div class="ctl"></div><div class="stat4"></div><div class="errs"></div><div class="bars"></div><div class="cap"></div></section>
     <section class="card rt" style="grid-column:1 / -1"><div class="card-h"><span class="t">SIMULATED RT DATA</span><span class="m">per message (subaddress) · EU waveform packed through the ICD bit fields</span></div><div class="scroll"><table class="rt-tbl"><thead><tr><th>MESSAGE</th><th>RT/SA</th><th>WORDS</th><th>SOURCE</th><th>VALUE</th><th>AMPLITUDE</th><th>PERIOD s</th><th>NOTE</th></tr></thead><tbody></tbody></table></div></section></div>`);
-  private key = ''; private runKey = ''; private tick = 0;
+  private key = ''; private runKey = ''; private tick = 0; private expectedLoad = 0;
   constructor() {
     this.el.addEventListener('click', e => {
       const t = e.target as HTMLElement; const a = (t.closest('[data-a]') as HTMLElement | null)?.dataset.a; const row = (t.closest('tr[data-m]') as HTMLElement | null)?.dataset.m;
@@ -35,6 +35,8 @@ export class SimulatePage {
     const minorIn = p.bus?.minorFrameMs > 0 ? p.bus.minorFrameMs : Math.max(1, Math.min(...sched.filter(s => s.enabled).map(s => s.periodMs), 100));
     const every = (s: any) => Math.max(1, Math.round(s.periodMs / minorIn)); const en = sched.filter(s => s.enabled);
     const major = en.length ? minorIn * en.map(every).reduce((a, b) => lcm(a, b), 1) : minorIn;
+    // expected bus load from the frame table: Σ rate(msg/s) × (command + status + data words) × 20 µs — the statistics panel's approximation
+    this.expectedLoad = en.reduce((a, s) => a + (1000 / (every(s) * minorIn)) * (2 + (s.wc || 32)) * 20e-6 * 100, 0);
     (this.el.querySelector('[data-m]') as HTMLElement).textContent = `${sched.length} messages · minor ${minorIn.toFixed(1)} ms · major ${major.toFixed(0)} ms`;
     this.el.querySelector('.frame-tbl tbody')!.innerHTML = sched.map((s, i) => `<tr data-m="${esc(s.message)}" class="${s.enabled ? '' : 'off'}"><td><span class="mv"><button data-a="up" title="Move up">▲</button><button data-a="down" title="Move down">▼</button></span> ${i + 1}</td><td><input type="checkbox" data-f="enabled"${s.enabled ? ' checked' : ''}></td><td>${esc(s.message)}</td><td>${s.rt}</td><td>${s.sa}</td><td>${s.tr ? 'RT→BC' : 'BC→RT'}</td><td>${s.wc}</td><td><input class="cell" data-f="periodMs" value="${esc(s.periodMs)}"></td><td>${every(s)}</td><td>${esc(s.bus)}</td></tr>`).join('') || `<tr><td colspan="10" class="muted11">No messages — load an ICD (ICD rail) or import a simulator project (PROJECT).</td></tr>`;
     const n = Math.min(64, Math.round(major / minorIn)); const vis = this.el.querySelector('.frame-vis')!;
@@ -54,7 +56,7 @@ export class SimulatePage {
     }
     const t = sim.elapsedS ?? 0; (ctl.querySelector('[data-el]') as HTMLElement).textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${(t % 60).toFixed(1).padStart(4, '0')}`;
     const stat = (k: string, v: string) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
-    this.el.querySelector('.stat4')!.innerHTML = stat('MESSAGES', `<b>${fmtInt(sim.messages ?? 0)}</b>`) + stat('ERRORS', `<b class="${sim.errors ? 'errv' : ''}">${fmtInt(sim.errors ?? 0)}</b>`) + stat('BUS LOAD', `<b>${(sim.loadPct ?? 0).toFixed(1)}</b><span>%</span>`) + stat('A / B', `<b>${fmtInt(sim.busA ?? 0)}</b><span>/ ${fmtInt(sim.busB ?? 0)}</span>`);
+    this.el.querySelector('.stat4')!.innerHTML = stat('MESSAGES', `<b>${fmtInt(sim.messages ?? 0)}</b>`) + stat('ERRORS', `<b class="${sim.errors ? 'errv' : ''}">${fmtInt(sim.errors ?? 0)}</b>`) + stat('BUS LOAD', `<b>${(sim.loadPct ?? 0).toFixed(1)}</b><span>%</span><span class="exp" data-exp="${this.expectedLoad.toFixed(3)}" title="From the frame table: Σ rate × (2 + data words) × 20 µs">expected ${this.expectedLoad.toFixed(1)} %</span>`) + stat('A / B', `<b>${fmtInt(sim.busA ?? 0)}</b><span>/ ${fmtInt(sim.busB ?? 0)}</span>`);
     const per: any[] = sim.perRt ?? []; const max = Math.max(1, ...per.map(x => x.count));
     this.el.querySelector('.bars')!.innerHTML = per.slice(0, 8).map(x => `<div class="bar"><span>RT ${x.rt}</span><i style="width:${(100 * x.count / max).toFixed(1)}%"></i><span>${fmtInt(x.count)}</span></div>`).join('');
     (this.el.querySelector('.cap') as HTMLElement).textContent = running ? `→ ANALYZE shows the capture live · stop writes ${sim.capturePath ?? ''}` : sim.lastCapture ? `last capture: ${sim.lastCapture}` : `captures go to ${sim.captureDir ?? ''}`;
@@ -68,6 +70,7 @@ export class SimulatePage {
       setError: (f: string, v: string) => fire(`.errs [data-err="${f}"]`, v),
       async move(m: string, dir: number) { (self.el.querySelector(`.frame-tbl tr[data-m="${m}"] [data-a="${dir < 0 ? 'up' : 'down'}"]`) as HTMLElement).click(); await new Promise(r => setTimeout(r, 150)); return true; },
       runFor: (seconds: number) => bridge.call('sim.runFor', { seconds }),
+      expectedLoad: () => +((self.el.querySelector('[data-exp]') as HTMLElement | null)?.dataset.exp ?? '-1'),
     };
   }
 }
