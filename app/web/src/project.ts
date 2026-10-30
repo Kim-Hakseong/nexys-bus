@@ -15,7 +15,7 @@ export class ProjectPage {
     });
     this.el.addEventListener('change', e => {
       const t = e.target as HTMLInputElement; const f = t.dataset.f; if (!f) return;
-      const num = ['channel', 'responseTenthUs', 'gapUs', 'seed'].includes(f); const dbl = f === 'minorFrameMs';
+      const num = ['channel', 'monitorChannel', 'responseTenthUs', 'gapUs', 'seed'].includes(f); const dbl = f === 'minorFrameMs';
       bridge.call('project.set', { field: f, value: num ? parseInt(t.value, 10) || 0 : dbl ? parseFloat(t.value) || 0 : t.value });
     });
   }
@@ -36,6 +36,7 @@ export class ProjectPage {
       </div>${row('', `<button class="pill h24" data-a="searchHw"${drv.bound ? '' : ' disabled'}>SEARCH HARDWARE</button><span class="d">${drv.bound ? esc('Binding: ' + drv.path) : 'Enabled when a driver binding (driver.json) is present'}</span>`)}</div></section>
       <section class="card"><div class="card-h"><span class="t">BUS</span><span class="m">channel ${b.channel ?? 0} · 1553B</span></div><div class="body-p">
         ${row('CHANNEL', `<select class="sel" data-f="channel">${[0, 1, 2, 3].map(c => `<option value="${c}"${b.channel === c ? ' selected' : ''}>${c}</option>`).join('')}</select><span class="d">Card channel (the virtual bus has one)</span>`)}
+        ${row('MONITOR CH', `<select class="sel" data-f="monitorChannel">${[-1, 0, 1, 2, 3].map(c => `<option value="${c}"${(b.monitorChannel ?? -1) === c ? ' selected' : ''}>${c < 0 ? 'none' : c}</option>`).join('')}</select><span class="d">Second card channel wired to the same bus, run as a bus monitor (single-function cards: the BC channel cannot monitor itself)</span>`)}
         ${row('MINOR FRAME', inp('minorFrameMs', b.minorFrameMs || '', 'in w80', ' placeholder="auto"') + `<span class="muted11">ms</span><span class="d">Empty = shortest message period</span>`)}
         ${row('RT RESPONSE', inp('responseTenthUs', b.responseTenthUs, 'in w80') + `<span class="muted11">× 0.1 µs</span><span class="d">8–12 µs response delay</span>`)}
         ${row('GAP', inp('gapUs', b.gapUs, 'in w80') + `<span class="muted11">µs</span><span class="d">Inter-message gap</span>`)}

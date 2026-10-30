@@ -15,7 +15,7 @@ namespace NexysBus.App;
 public static partial class SelfTest
 {
     public static string[] Args = Array.Empty<string>();
-    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw";
+    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site";
     static readonly List<string> Log = new();
     public static string OutDir = "";
     static readonly List<string> Gate = new();
@@ -45,7 +45,17 @@ public static partial class SelfTest
             else if (Args[0] == "--uishots") await UiShots(w);
             else if (Args[0] == "--uishots2") await UiShots2(w);
             else if (Args[0] == "--hw") await Hw(w);
-            else if (Args[0] == "--shot") { await JS(w, $"await nx.test.rail({J(Arg("--rail", "START"))}); return true;"); await Shot(w, Arg("--name", "shot")); }
+            else if (Args[0] == "--site") await Site(w);
+            else if (Args[0] == "--shot")
+            {
+                // --shot --rail NAME [--click SELECTOR[;SELECTOR…]] [--wait ms] --name file: optional clicks after the rail switch (e.g. [data-a=searchHw] on PROJECT with a card)
+                await JS(w, $"await nx.test.rail({J(Arg("--rail", "START"))}); return true;");
+                foreach (var sel in Arg("--click").Split(';', StringSplitOptions.RemoveEmptyEntries)) { await JS(w, $"await nx.test.clickSel({J(sel)}); return true;"); await Idle(w, int.TryParse(Arg("--wait", "400"), out int ms) ? ms : 400); }
+                // --js "<body>" runs test-hook JavaScript (window.nx.test.*) before the capture; "--js @file" reads it from a file
+                string js = Arg("--js"); if (js.StartsWith("@")) js = File.ReadAllText(js[1..]);
+                if (js.Length > 0) { var r = await JS(w, js, 600000); L("js result: " + r.ToString()); await Idle(w, int.TryParse(Arg("--wait", "400"), out int ms2) ? ms2 : 400); }
+                await Shot(w, Arg("--name", "shot"));
+            }
         }
         catch (Exception ex) { L("FATAL " + ex); }
         finally

@@ -14,6 +14,9 @@ public sealed class SimulationService
     readonly BusEngine _e;
     IBusDevice? _dev; Mil1553File? _live; DataFile? _df; DispatcherTimer? _timer; Stopwatch? _sw; string _path = "";
     readonly List<BusRecord> _buf = new(); int _seq;
+    // a hardware card is polled from its own thread (5 ms pacing): a single-function BC keeps only the last transaction per message, so the
+    // 100 ms dispatcher timer would lose four of five 20 ms transactions; the thread fills _pending, Pump drains it into the capture
+    Thread? _poller; volatile bool _pollStop; readonly object _lock = new(); readonly List<BusRecord> _pending = new(); string _pollError = "";
     public SimulationService(BusEngine e) { _e = e; }
     public bool Running => _dev?.IsRunning == true;
     public string LastCapture { get; private set; } = "";
@@ -32,8 +35,10 @@ public sealed class SimulationService
             var cfg = _e.Project.ToConfig();
             if (cfg.Messages.Count(m => m.Enabled) == 0) { _e.SetStatus("Nothing to run: load an ICD (ICD rail) or import a simulator project first"); return; }
             _dev?.Dispose();
-            _dev = _e.Project.Device == "virtual" ? new VirtualBusDevice { ManualClock = manualClock } : new HardwareBusDevice(BusEngine.CardIndex(_e.Project.Device), _e.Driver, channel: _e.Project.Bus.Channel);
+            if (_e.Project.Device == "virtual") _dev = new VirtualBusDevice { ManualClock = manualClock };
+            else { var hw = new HardwareBusDevice(BusEngine.CardIndex(_e.Project.Device), _e.Driver, channel: _e.Project.Bus.Channel); if (_e.Project.Bus.MonitorChannel >= 0 && _e.Project.Bus.MonitorChannel != _e.Project.Bus.Channel) hw.MonitorChannels.Add(_e.Project.Bus.MonitorChannel); _dev = hw; }
             _dev.Open(); _dev.Configure(cfg);
+            if (_dev is HardwareBusDevice h0) foreach (var wn in h0.Warnings) Diag.Trace("hardware configure: " + wn);
             Directory.CreateDirectory(CaptureDir);
             _path = Path.Combine(CaptureDir, $"{San(_e.Project.Name)}_{DateTime.Now:yyyyMMdd_HHmmss}_{++_seq:00}.mon");   // unique per run (two runs inside one second must not share a file / DataFile name)
             _live = Mil1553File.Live(_path);
@@ -41,17 +46,39 @@ public sealed class SimulationService
             if (_e.Mil1553.Hub != null) Mil1553DataSource.AttachIcd(_df, _e.Mil1553.Hub);
             _e.State.Files.Add(_df); _e.FilesChangedExternally(); _e.Mil1553.SelectFile(_df.Name);
             _dev.Start(); _sw = Stopwatch.StartNew(); Runs++;
+            if (_dev is HardwareBusDevice hwDev && !manualClock) StartPoller(hwDev);
             if (!manualClock) { _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) }; _timer.Tick += (_, _) => Pump(); _timer.Start(); }
-            _e.SetLed("busy"); _e.SetStatus($"Bus running on {_dev.Info.Name}: {cfg.Messages.Count(m => m.Enabled)} messages, minor frame {(_dev as VirtualBusDevice)?.MinorFrameMs ?? 0:F1} ms → {Path.GetFileName(_path)}");
+            double minor = _dev is VirtualBusDevice vb ? vb.MinorFrameMs : _dev is HardwareBusDevice hb ? hb.MinorFrameMs : 0;
+            _e.SetLed("busy"); _e.SetStatus($"Bus running on {_dev.Info.Name}: {cfg.Messages.Count(m => m.Enabled)} messages, minor frame {minor:F1} ms{(_dev is HardwareBusDevice hm && hm.BcTransactionRecords ? " (BC message blocks)" : "")} → {Path.GetFileName(_path)}");
             _e.Touch();
         }
         catch (Exception ex) { LastError = ex.Message; Diag.Trace("sim start failed " + ex); _e.SetStatus("Start failed: " + ex.Message); _e.SetLed("error"); _dev?.Dispose(); _dev = null; }
     }
 
+    void StartPoller(HardwareBusDevice hw)
+    {
+        _pollStop = false; _pollError = "";
+        _poller = new Thread(() =>
+        {
+            var tmp = new List<BusRecord>(); var sw = Stopwatch.StartNew(); double next = 0;
+            while (!_pollStop)
+            {
+                while (sw.Elapsed.TotalMilliseconds < next && !_pollStop) Thread.Sleep(1);
+                next = sw.Elapsed.TotalMilliseconds + 5; tmp.Clear();
+                try { hw.Poll(tmp); } catch (Exception ex) { _pollError = ex.Message; Diag.Trace("hardware poll " + ex); break; }
+                if (tmp.Count > 0) lock (_lock) _pending.AddRange(tmp);
+            }
+        }) { IsBackground = true, Name = "bus-poll" };
+        _poller.Start();
+    }
+    void StopPoller() { _pollStop = true; try { _poller?.Join(2000); } catch { } _poller = null; }
+
     void Pump()
     {
         if (_dev == null || _live == null) return;
-        _buf.Clear(); _dev.Poll(_buf);
+        _buf.Clear();
+        if (_poller != null) { lock (_lock) { _buf.AddRange(_pending); _pending.Clear(); } if (_pollError.Length > 0) { LastError = _pollError; _e.SetStatus("Hardware poll failed: " + _pollError); _e.SetLed("error"); } }
+        else _dev.Poll(_buf);
         foreach (var r in _buf) _live.Append(r.TimeUs, r.Activity, r.Error, r.Cwd1, r.Cwd2, r.Swd1, r.Swd2, r.Data, r.RespTime1, r.RespTime2);
         if (_buf.Count > 0) _e.Mil1553.Refresh();
     }
@@ -60,11 +87,11 @@ public sealed class SimulationService
     {
         if (_dev == null) return;
         _timer?.Stop(); _timer = null;
-        try { _dev.Stop(); Pump(); _dev.Close(); } catch (Exception ex) { Diag.Trace("sim stop " + ex); }
+        try { StopPoller(); _dev.Stop(); Pump(); _dev.Close(); } catch (Exception ex) { Diag.Trace("sim stop " + ex); }
         _sw?.Stop();
         try { if (_live != null && _live.Count > 0) { _live.SaveAs(_path); LastCapture = _path; } } catch (Exception ex) { LastError = ex.Message; Diag.Trace("capture save failed " + ex); }
-        var c = _dev.Counters;
-        _e.SetLed("ready"); _e.SetStatus($"Bus stopped: {c.Messages:N0} messages, {c.Errors:N0} errors, load {c.LoadPct:F1} % → {Path.GetFileName(_path)}");
+        var c = _dev.Counters; string missed = _dev is HardwareBusDevice hs && hs.BcTransactionRecords ? $", {hs.MissedTransactions:N0} not read (BC message blocks)" : "";
+        _e.SetLed("ready"); _e.SetStatus($"Bus stopped: {c.Messages:N0} messages, {c.Errors:N0} errors, load {c.LoadPct:F1} %{missed} → {Path.GetFileName(_path)}");
         _e.Touch();
     }
 
@@ -78,14 +105,15 @@ public sealed class SimulationService
 
     public object Dto()
     {
-        var d = _dev; var c = d?.Counters; var v = d as VirtualBusDevice;
+        var d = _dev; var c = d?.Counters; var v = d as VirtualBusDevice; var hw = d as HardwareBusDevice;
         return new
         {
             running = Running, device = d?.Info, elapsedS = ElapsedS, runs = Runs, lastError = LastError,
             messages = c?.Messages ?? 0, errors = c?.Errors ?? 0, busA = c?.BusA ?? 0, busB = c?.BusB ?? 0, loadPct = c?.LoadPct ?? 0,
             noResponse = c?.NoResponse ?? 0, parity = c?.Parity ?? 0, wordCount = c?.WordCount ?? 0,
             perRt = c == null ? new List<object>() : Enumerable.Range(0, 32).Where(i => c.PerRt[i] > 0).Select(i => (object)new { rt = i, count = c.PerRt[i] }).ToList(),
-            minorMs = v?.MinorFrameMs ?? 0, majorMs = v?.MajorFrameMs ?? 0,
+            minorMs = v?.MinorFrameMs ?? hw?.MinorFrameMs ?? 0, majorMs = v?.MajorFrameMs ?? hw?.MajorFrameMs ?? 0,
+            hardware = hw == null ? null : new { hw.TypeName, hw.Product, hw.Serial, hw.Channel, monitorChannels = hw.MonitorChannels, hw.MonitorOnBcChannel, hw.BcTransactionRecords, hw.MissedTransactions, warnings = hw.Warnings, driverVersion = hw.DriverVersion },
             slots = v?.Slots.Select(s => new { message = s.Message.Name, every = s.Every, durationUs = s.DurationUs, rt = s.Message.Rt, sa = s.Message.Sa, tr = s.Message.Tr, wc = s.Message.DataWords, bus = s.Message.Bus }).ToList(),
             expected10s = v?.ExpectedMessages(10) ?? 0, capture = _df?.Name, capturePath = _path, lastCapture = LastCapture, captureDir = CaptureDir,
         };

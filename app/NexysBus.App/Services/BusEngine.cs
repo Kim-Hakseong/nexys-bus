@@ -75,6 +75,7 @@ public sealed class BusEngine : EngineBase
             case "name": p.Name = v.GetString() ?? p.Name; break;
             case "device": p.Device = v.GetString() == "virtual" ? "virtual" : v.GetString() ?? "virtual"; break;
             case "channel": p.Bus.Channel = Math.Clamp(v.GetInt32(), 0, 3); break;
+            case "monitorChannel": p.Bus.MonitorChannel = Math.Clamp(v.GetInt32(), -1, 3); break;
             case "minorFrameMs": p.Bus.MinorFrameMs = Math.Max(0, v.GetDouble()); break;
             case "responseTenthUs": p.Bus.ResponseTenthUs = Math.Clamp(v.GetInt32(), 1, 10000); break;
             case "gapUs": p.Bus.GapUs = Math.Clamp(v.GetInt32(), 0, 1000); break;
@@ -170,7 +171,7 @@ public sealed class BusEngine : EngineBase
         var p = Project; var byName = p.Icd.Messages.ToDictionary(m => m.Name, m => m);
         return new
         {
-            name = p.Name, path = p.Path, dirty = Dirty, device = p.Device, bus = new { channel = p.Bus.Channel, minorFrameMs = p.Bus.MinorFrameMs, responseTenthUs = p.Bus.ResponseTenthUs, gapUs = p.Bus.GapUs, seed = p.Bus.Seed },
+            name = p.Name, path = p.Path, dirty = Dirty, device = p.Device, bus = new { channel = p.Bus.Channel, monitorChannel = p.Bus.MonitorChannel, minorFrameMs = p.Bus.MinorFrameMs, responseTenthUs = p.Bus.ResponseTenthUs, gapUs = p.Bus.GapUs, seed = p.Bus.Seed },
             icd = new { source = p.Icd.Source, messages = p.Icd.Messages.Count, words = p.Icd.Messages.Sum(m => m.Words.Count), errors = IcdHub.Validate(p.Icd).Count(x => x.StartsWith("error")) },
             schedule = p.Schedule.OrderBy(x => x.Order).Select(x => { byName.TryGetValue(x.Message, out var m); var src = p.Sources.GetValueOrDefault(x.Message) ?? new BusDataSource(); return new { message = x.Message, order = x.Order, enabled = x.Enabled, periodMs = x.PeriodMs, rt = m?.Rt ?? 0, sa = m?.Sa ?? 0, tr = m?.Tr ?? 0, wc = m?.Wc ?? 0, bus = m?.Bus ?? "A", words = m?.Words.Count ?? 0, source = new { kind = src.Kind, value = src.Value, amplitude = src.Amplitude, periodS = src.PeriodS } }; }).ToList(),
             errors = new { noResponse = p.Errors.NoResponseEvery, parity = p.Errors.ParityEvery, wordCount = p.Errors.WordCountEvery },
