@@ -4,13 +4,26 @@
 
 **MIL-STD-1553 버스 시뮬레이션 · 캡처 분석 · ICD — 가상 버스로 지금 바로, 하드웨어 카드는 드라이버가 있는 PC에서 같은 화면으로.**
 
-![version](https://img.shields.io/badge/version-0.2.0--beta.2-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
+![version](https://img.shields.io/badge/version-0.3.0--beta.2-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
 
 C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-core](https://github.com/Kim-Hakseong/nexys-core) submodule
 
-> ⚠️ 0.2.0 beta.2(= beta.1 + 저장소 소스의 .dxd 탐색 수정, 내보내기 관문 강화). 앱 이름은 임시이고(결정 항목), 하드웨어 카드 지원은 **드라이버 바인딩(driver.json) + SEARCH HARDWARE + `HardwareBusDevice`**까지 들어갔지만 실카드 실측은 아직 0회(가짜 드라이버 계약 테스트 5개와 드라이버 라이브러리 바인딩만 확인, `--hw` 셀프테스트가 현장 절차). 모든 수치는 가상 버스·가상 데이터 기준. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
+## 데모 영상 — 실제 카드 ↔ HIL 시뮬레이터 RT 4 양방향 검증
+[![NexysBus 데모 (클릭하면 전체 영상)](docs/media/nexysbus-demo-preview.gif)](docs/media/nexysbus-demo.mp4)
 
-[![SIMULATE](docs/images/simulate.png)](docs/images/simulate.png)
+USB 1553 카드(단일 기능 채널 2개)를 BC로 HIL 시뮬레이터의 RT 4(버스 B)와 주고받는 장면입니다. 카드 인식 → 프레임 로드·START → SA4 시간 카운터·SA3 상태 워드를 양쪽 화면에서 비교 → 상대 RT를 멈추면 NO RESPONSE가 쌓이고 다시 켜면 복구 → 통계.
+**전체 영상(2분 6초)**: [nexysbus-demo.mp4](docs/media/nexysbus-demo.mp4) · **60초 요약**: [nexysbus-demo-60s.mp4](docs/media/nexysbus-demo-60s.mp4) · 자막: [srt](docs/media/nexysbus-demo.srt)
+
+## 사용 가이드
+처음 쓰는 분은 **[사용 가이드](docs/guide/README.md)**부터 보세요 — 설치, 화면 구성, 5분 따라 하기, PROJECT · ICD · SIMULATE · ANALYZE 기능별 설명, 하드웨어 카드 연결, 자동화·현장 측정, 파일 형식·단축키·문제 해결(8장, 화면 그림 포함). 앱 안에서는 F1.
+
+| [1. 시작하기](docs/guide/01-getting-started.md) | [2. PROJECT](docs/guide/02-project.md) | [3. ICD](docs/guide/03-icd.md) | [4. SIMULATE](docs/guide/04-simulate.md) |
+|---|---|---|---|
+| [**5. ANALYZE**](docs/guide/05-analyze.md) | [**6. 하드웨어 카드**](docs/guide/06-hardware.md) | [**7. 자동화·현장 측정**](docs/guide/07-automation.md) | [**8. 파일·단축키·FAQ**](docs/guide/08-reference.md) |
+
+> 0.3.0 beta.2: 실제 USB 1553 카드와 외부 RT로 측정을 마친 첫 버전대(응답률 100 %, 10분 연속 138,003 / 138,000 명령, 놓친 트랜잭션 0.05 %). 사이트 프로필, 채널 능력 기반 역할 배정, 장비 설정 XML 가져오기, 모드 코드를 지원합니다. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
+
+[![ANALYZE](docs/guide/images/08_analyze.png)](docs/guide/images/08_analyze.png)
 
 * * *
 
@@ -44,17 +57,17 @@ C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-c
 
 뷰어에서 옮겨 온 BUS/ICD 관문(`--v100rc` 31 관문 + UI 피드백 관문 12, `--v0100` 1M 레코드 성능)도 그대로 통과한다 — [docs/bus-report.md](docs/bus-report.md). beta.2는 UI 피드백 10항목(ERR/STAT 분리, ABS 시간 툴팁, 한 줄 필터 바, BUS TREE, 추이 카드 헤더, 비트 묶음, ICD 푸터, 개발자 전용 DUMMY, 내부 식별자 제거, 영문 UI)을, beta.3은 피드백 2의 8항목(EXPORT 블록, EU 열 55:45, BUS 열·버튼 폭, 시작 버튼 라벨, 영문 관문 확장, 다크 강조색 1종, SETTINGS 카드, RUN expected load)을 반영했다.
 
-## 하드웨어 카드 (0.2.0-beta.1)
+## 하드웨어 카드
 카드 드라이버는 **정적으로 링크하지 않는다** — 배포물에 드라이버 라이브러리도, 그 이름도 없다. 실행 시 `driver.json`(exe 옆 또는 `%LOCALAPPDATA%\NexysBus\`)을 읽어 `NativeLibrary.Load` + `GetExport(prefix + "CardOpen")`로 묶는다:
 ```json
 { "cardLibrary": "<card API dll>", "busLibrary": "<1553 API dll>", "cardPrefix": "<CardApi>_", "busPrefix": "<BusApi>_", "maxCards": 4 }
 ```
-- 파일이 없으면 SEARCH HARDWARE 비활성, 장치 목록은 Virtual bus만 — 예외 없음. 있으면 시작 화면·PROJECT의 **SEARCH HARDWARE**가 카드를 열거하고(타입·제품·S/N·1553 채널 수) PROJECT › DEVICE에서 고른다.
-- 호출 순서는 드라이버 문서의 순서 그대로: Open = CardOpen → CoreOpen → ChIs1553 · Configure = CardReset → BCConfig → BCCreateMsg × n → (BCSchedFrame + BCSchedMsg …) 메이저 프레임 1회분 → RTConfig/RTGetMsg(+MsgDataWr) 시뮬레이트 RT → MonConfig → SeqConfig · Start = CardStart · Poll = SeqBlkRd → SeqFindInit/SeqFindNext1553(+ 버전 1 "more": 상위 타임스탬프·응답 시간) · Stop/Close. `SimulateRt = false`인 메시지의 RT는 카드에 구성하지 않는다(무응답 실험).
-- 검증 상태: 가짜 드라이버 API로 **호출 순서·레코드 디코딩·바인딩 없음 → 빈 목록** 계약 테스트 5개(`NexysView.Core.Tests/BusDeviceTests.cs`), 실제 드라이버 라이브러리로 export 24개 바인딩 + CardOpen 오류값 확인(카드 없는 PC). **실카드 실행은 0회** — `NexysBus.exe --hw --out <dir> [--card n] [--channel n] [--seconds s] [--project f.nxb] [--binding driver.json]`가 G1~G7(카드 열거 → 열기 → 프레임 구성 → 10 s 실행 메시지 수 = Σ⌈T/주기⌉ ±1 % → Δt 중앙값 → 무응답 RT → 캡처 파일)을 `gates.txt`로 남긴다.
+- 파일이 없으면 SEARCH HARDWARE 비활성, 장치 목록은 Virtual bus만 — 예외 없음. 있으면 시작 화면·PROJECT의 **SEARCH HARDWARE**가 카드를 열거하고(타입·제품·S/N·1553 채널 수·**채널마다 단일/다중 기능**) PROJECT › DEVICE에서 고른다.
+- 채널 역할은 한 곳(`ChannelRoles`)에서 정한다: 다중 기능 채널은 BC + 시뮬레이트 RT + 모니터, 단일 기능 채널은 BC만(옆에 RT·모니터를 구성하면 드라이버가 BC 스케줄까지 지운다는 것이 실측으로 확인돼 아예 시도하지 않음) — BC 기록은 메시지 블록을 5 ms마다 읽어 시간순으로, 전체 버스 모니터는 두 번째 채널(MONITOR CH).
+- 실측(USB 1553 카드 ↔ 외부 RT 4, 버스 B): 30 s 6,896 / 6,900 명령·응답률 100 %·DATA COUNT 오류 0·모드 코드 16/17 응답, 10 min 138,003 / 138,000·누락 0.05 %·시간 역순 0·메모리 +42 MB, 타임태그 = µs. 자세한 것은 [가이드 6장](docs/guide/06-hardware.md).
 
 ## 자동화
-`NexysBus.exe --bus --out <dir> [--template <folder>] --forbid a,b,c`(사용자 경로 전체), `--v100rc --out <dir> [--xlsx <file>] [--template <folder>] --forbid …`(ANALYZE·ICD + UI 피드백 관문), `--hw --out <dir> …`(하드웨어 카드 G1~G7, 위 절), `--v0100 --out <dir> [--truth <mon>]`, `--stress --iter 50`, `--uishots --out <dir> --prefix before|after`(피드백 10장면 캡처), `--uishots2 …`(피드백 2의 8장면), `--shot --rail SIMULATE --name x`. UI는 영문, 도움말(F1)만 한글. `Ctrl+Shift+D` 개발자 모드(ICD 푸터 DUMMY).
+`NexysBus.exe --bus --out <dir> [--template <folder>] --forbid a,b,c`(사용자 경로 전체), `--v100rc --out <dir> [--xlsx <file>] [--template <folder>] --forbid …`(ANALYZE·ICD + UI 피드백 관문), `--hw --out <dir> …`(하드웨어 카드 G1~G7), `--site --out <dir> --profile <json>`(현장 측정, [사이트 프로필](docs/site-profile.md)), `--icdxml --dev <xml> --par <xml> --truth <csv>`(장비 설정 XML 가져오기 검증), `--v0100 --out <dir> [--truth <mon>]`, `--stress --iter 50`, `--uishots --out <dir> --prefix before|after`(피드백 10장면 캡처), `--uishots2 …`(피드백 2의 8장면), `--shot --rail SIMULATE --name x`. UI는 영문, 도움말(F1)만 한글. `Ctrl+Shift+D` 개발자 모드(ICD 푸터 DUMMY).
 
 ## 파일
 - `.nxb` 프로젝트(JSON, 버전 1): device · bus · icd(허브 스키마 1.0) · schedule · sources · errors · captureDir.
