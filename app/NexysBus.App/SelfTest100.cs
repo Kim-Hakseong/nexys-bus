@@ -129,7 +129,7 @@ public static partial class SelfTest
         await Shot(w, "v100_05_icd_import");
         var ir = JsonDocument.Parse((await JS(w, "return JSON.stringify(await nx.test.icd().importGo());")).GetString()!).RootElement;
         int msgs = (await JS(w, "return nx.test.icd().messages();")).GetInt32();
-        GB("icd_import_csv_mapping", mapped == 15 && msgs == 10 && ir.GetProperty("words").GetInt32() == 40 && ir.GetProperty("errors").GetArrayLength() == 0, $"auto-mapped columns={mapped}/15 messages={msgs} words={ir.GetProperty("words")} errors={ir.GetProperty("errors").GetArrayLength()}");
+        GB("icd_import_csv_mapping", mapped == NexysView.Core.Mil1553.IcdHub.Columns.Length && msgs == 10 && ir.GetProperty("words").GetInt32() == 40 && ir.GetProperty("errors").GetArrayLength() == 0, $"auto-mapped columns={mapped}/{NexysView.Core.Mil1553.IcdHub.Columns.Length} messages={msgs} words={ir.GetProperty("words")} errors={ir.GetProperty("errors").GetArrayLength()}");
         string xlsx = Arg("--xlsx");
         if (xlsx.Length > 0 && File.Exists(xlsx))
         {
