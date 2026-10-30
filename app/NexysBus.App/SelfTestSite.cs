@@ -24,6 +24,23 @@ public static partial class SelfTest
         public double PollMax, PollMean, WallS; public int Polls; public string Err = ""; public long Missed; public int BlockReads; public List<string> Warnings = new();
     }
     static readonly Dictionary<string, object> SiteSum = new();
+    static double SiteTickMs;   // expected counter tick (profile), 0 = measure only
+    static bool Has(string a) => Array.IndexOf(Args, a) >= 0;
+
+    /// <summary>--icdxml --dev &lt;device.xml&gt; [--par &lt;parameters.xml&gt;] --truth &lt;icd.csv&gt;: the device-configuration import must give the same
+    /// message set (rt / sa or mode code / direction / word count) as the reference ICD CSV.</summary>
+    static void IcdXmlGate()
+    {
+        string dev = Arg("--dev"), par = Arg("--par"), truth = Arg("--truth");
+        IcdHub? hd = dev.Length > 0 ? IcdDeviceImport.FromDeviceXml(File.ReadAllText(dev)) : null, hp = par.Length > 0 ? IcdDeviceImport.FromParametersXml(File.ReadAllText(par)) : null;
+        var hub = IcdDeviceImport.Merge(hd, hp); var tr = IcdHub.FromCsv(truth);
+        var a = hub.Messages.Select(IcdDeviceImport.Key).OrderBy(x => x).ToList(); var b = tr.Messages.Select(IcdDeviceImport.Key).OrderBy(x => x).ToList();
+        var missing = b.Except(a).ToList(); var extra = a.Except(b).ToList();
+        G("icdxml_device_messages", hd?.Messages.Count ?? 0, ""); G("icdxml_parameters_messages", hp?.Messages.Count ?? 0, ""); G("icdxml_merged_messages", hub.Messages.Count, ""); G("icdxml_truth_messages", tr.Messages.Count, "");
+        GB("icdxml_same_as_truth", missing.Count == 0 && extra.Count == 0 && a.Count > 0, $"merged {string.Join(", ", a)} | missing vs truth: {string.Join(", ", missing)} | extra: {string.Join(", ", extra)}");
+        GB("icdxml_validates", IcdHub.Validate(hub).Count == 0, string.Join("; ", IcdHub.Validate(hub)));
+        if (dev.Length > 0) { var byFile = IcdDeviceImport.FromXmlFile(dev, out string desc); GB("icdxml_sibling_merge", byFile != null && byFile.Messages.Select(IcdDeviceImport.Key).OrderBy(x => x).SequenceEqual(a), $"FromXmlFile: {desc}, {byFile?.Messages.Count ?? 0} messages"); }
+    }
 
     static BusConfig SiteFrame(int rt, int wc, double periodMs, string bus)
     {
@@ -170,6 +187,7 @@ public static partial class SelfTest
             int zero = incs.Count(d => d == 0); int jumps = incs.Count(d => d > mode && mode > 0); long missing = mode > 0 ? incs.Where(d => d > mode).Sum(d => d / mode - 1) : 0;
             double ticksPerPeriod = msPerTick > 0 ? periodMs / msPerTick : 0;
             G($"{tag}_counter_decreases", decreases, "", "=0"); G($"{tag}_counter_mode_increase", mode, "ticks"); G($"{tag}_counter_ms_per_tick", msPerTick, "ms"); G($"{tag}_counter_ticks_per_period", ticksPerPeriod, ""); G($"{tag}_counter_repeats", zero, ""); G($"{tag}_counter_jumps", jumps, ""); G($"{tag}_counter_missing_est", missing, "", "=0");
+            if (SiteTickMs > 0) GB($"{tag}_counter_tick_unit", msPerTick > 0 && Math.Abs(msPerTick - SiteTickMs) / SiteTickMs <= 0.05, $"measured {msPerTick:F3} ms/tick vs profile {SiteTickMs} ms (±5 %)");
             GB($"{tag}_counter_monotonic", decreases == 0, $"SA{counter.sa} W{counter.w:00}: {cr.Count} samples {cr[0].v} → {cr[^1].v} (wraps {wraps}), decreases {decreases}, increase mode {mode} ticks per sample, {msPerTick:F3} ms/tick, repeats {zero}, jumps {jumps} (≈ {missing} missing samples)");
             SiteSum[$"{tag}_counter"] = new { samples = cr.Count, first = cr[0].v, last = cr[^1].v, decreases, mode, msPerTick, ticksPerPeriod, repeats = zero, jumps, missing };
         }
@@ -191,10 +209,17 @@ public static partial class SelfTest
     static async Task Site(MainWindow w)
     {
         var sw = Stopwatch.StartNew();
-        int card = int.Parse(Arg("--card", "0")), channel = int.Parse(Arg("--channel", "0")), mon = int.Parse(Arg("--mon", "1")), rt = int.Parse(Arg("--rt", "4")), wc = int.Parse(Arg("--wc", "32")), poll = int.Parse(Arg("--poll", "10"));
-        double period = double.Parse(Arg("--period", "20"), System.Globalization.CultureInfo.InvariantCulture), seconds = double.Parse(Arg("--seconds", "30"), System.Globalization.CultureInfo.InvariantCulture), bseconds = double.Parse(Arg("--bseconds", "30"), System.Globalization.CultureInfo.InvariantCulture), minutes = double.Parse(Arg("--minutes", "10"), System.Globalization.CultureInfo.InvariantCulture), tagUnit = double.Parse(Arg("--tagunit", "1"), System.Globalization.CultureInfo.InvariantCulture);
-        var expect = ParseExpect(Arg("--expect", "sa3:0=8000,1=0081,8=93C7,10=EB0D;sa4:8=FFFE,9=FFFE,10=FFFE")); var cp = Arg("--counter", "sa4:1").Split(':'); var counter = (sa: int.Parse(cp[0][2..]), w: int.Parse(cp[1]));
-        string mainBus = Arg("--bus", "A").ToUpperInvariant() == "B" ? "B" : "A", otherBus = mainBus == "A" ? "B" : "A"; string icd = Arg("--icd"); bool retain = Arg("--retain", "1") != "0";
+        // bench values come from the site profile (docs/site-profile.md); explicit command-line values override it; without either only H0 runs
+        SiteProfile? prof = null; string profArg = Arg("--profile");
+        if (profArg.Length > 0) { prof = SiteProfile.Load(profArg); L($"profile {prof.Name} ({prof.Path}): {prof.Description}"); if (prof.Notes.Length > 0) L("profile notes: " + prof.Notes); SiteSum["profile"] = new { prof.Name, prof.Path, prof.Description, prof.Notes }; }
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        int card = int.Parse(Arg("--card", "0")), channel = int.Parse(Arg("--channel", "0")), mon = Has("--mon") ? int.Parse(Arg("--mon")) : prof?.MonitorChannel ?? -1, rt = Has("--rt") ? int.Parse(Arg("--rt")) : prof?.Rt ?? 4, wc = int.Parse(Arg("--wc", "32")), poll = int.Parse(Arg("--poll", "5"));
+        double period = Has("--period") ? double.Parse(Arg("--period"), ci) : prof?.PeriodMs ?? 20, seconds = double.Parse(Arg("--seconds", "30"), ci), bseconds = double.Parse(Arg("--bseconds", "30"), ci), minutes = double.Parse(Arg("--minutes", "10"), ci), tagUnit = double.Parse(Arg("--tagunit", "1"), ci);
+        var expect = Has("--expect") ? ParseExpect(Arg("--expect")) : prof?.ExpectWords() ?? new();
+        (int sa, int w) counter = (-1, 0); if (Has("--counter")) { var cp = Arg("--counter").Split(':'); counter = (int.Parse(cp[0][2..]), int.Parse(cp[1])); } else if (prof?.Counter != null) counter = (prof.Counter.Sa, prof.Counter.Word);
+        SiteTickMs = prof?.Counter?.MsPerTick ?? 0;
+        string mainBus = Has("--bus") ? (Arg("--bus").ToUpperInvariant() == "B" ? "B" : "A") : prof?.Bus ?? "A", otherBus = mainBus == "A" ? "B" : "A"; string icd = Has("--icd") ? Arg("--icd") : prof?.Icd ?? ""; bool retain = Arg("--retain", "1") != "0";
+        bool haveFrame = prof != null || icd.Length > 0 || Has("--rt");
         L($"site: card {card} channel {channel} monitor channel {mon} RT {rt} WC {wc} period {period} ms poll {poll} ms, H1 {seconds} s on bus {mainBus}, H2 {bseconds} s on bus {otherBus}, H3 {minutes} min on bus {mainBus}");
         // ---- H0 binding, enumerate, open, channel capabilities
         string bindingArg = Arg("--binding");
@@ -208,11 +233,13 @@ public static partial class SelfTest
         try { dev.Open(); } catch (Exception ex) { L("open failed: " + ex.Message); }
         GB("site_open", dev.IsOpen, dev.IsOpen ? $"{dev.TypeName} / {dev.Product} / S/N {dev.Serial} / driver version 0x{dev.DriverVersion:X} / core {dev.CoreNumber} BC channel {dev.Channel}" : dev.LastError);
         if (!dev.IsOpen) { dev.Dispose(); return; }
-        var caps = new List<string>();
-        foreach (int ch in new[] { channel, mon }.Where(c => c >= 0).Distinct()) { uint mm = dev.ChannelInfo(DriverConst.Info1553MultiMode, ch), cm = dev.ChannelInfo(DriverConst.Info1553ConcurMon, ch); caps.Add($"ch{ch}: multimode {mm} concurrent-monitor {cm}"); }
-        GB("site_channel_info", true, string.Join(" | ", caps)); SiteSum["channels"] = caps;
+        var caps = dev.Capabilities.Select(c => $"ch{c.Channel}: {c.Text}{(c.ConcurrentMonitor ? ", concurrent monitor" : "")}").ToList();
+        GB("site_channel_info", dev.Capabilities.Count > 0, string.Join(" | ", caps)); SiteSum["channels"] = dev.Capabilities;
+        var roles = ChannelRoles.Assign(dev.Capabilities, channel, mon >= 0 ? new[] { mon } : Array.Empty<int>());
+        GB("site_roles", true, $"BC ch {roles.BcChannel}, RT next to BC {roles.RtOnBcChannel}, monitor next to BC {roles.MonitorOnBcChannel}, monitor ch {(roles.MonitorChannel >= 0 ? roles.MonitorChannel.ToString() : "none")}, BC records {(roles.BcTransactionRecords ? "message blocks" : "sequential monitor")}; {string.Join(" / ", roles.Notes)}");
+        if (!haveFrame) { GB("site_no_frame", true, "no --profile / --icd / --rt given: enumerate, open, channel capabilities and role assignment only (nothing transmitted)"); File.WriteAllLines(Path.Combine(OutDir, "calllog.txt"), dev.CallLog); File.WriteAllText(Path.Combine(OutDir, "site_summary.json"), JsonSerializer.Serialize(SiteSum, new JsonSerializerOptions { WriteIndented = true })); dev.Dispose(); return; }
         // ---- H0 configure once (frame A) to learn the channel's limits
-        var cfgA = icd.Length > 0 && File.Exists(icd) ? IcdFrame(icd, mainBus, period) : SiteFrame(rt, wc, period, mainBus); string cfgErr = "";
+        var cfgA = icd.Length > 0 && File.Exists(icd) ? IcdFrame(icd, mainBus, period) : prof != null && prof.Messages.Count > 0 ? prof.ToConfig(mainBus) : SiteFrame(rt, wc, period, mainBus); string cfgErr = "";
         L($"frame: {(icd.Length > 0 ? icd : "built-in SA1..SA4")} — " + string.Join(", ", cfgA.Messages.Select(m => $"{m.Name}[{(m.IsModeCode ? "MC" + m.ModeCode : "SA" + m.Sa)}{(m.Tr == 1 ? "T" : "R")} wc {m.DataWords} {m.PeriodMs} ms]")));
         try { dev.Configure(cfgA); } catch (Exception ex) { cfgErr = ex.Message; }
         GB("site_configure", cfgErr.Length == 0, cfgErr.Length == 0 ? $"{cfgA.Messages.Count} messages ({(icd.Length > 0 ? Path.GetFileName(icd) : $"RT {rt} SA1/SA2 BC→RT WC {wc}, SA3/SA4 RT→BC WC {wc}")}, minor {dev.MinorFrameMs} ms major {dev.MajorFrameMs} ms), {dev.CallLog.Count} driver calls, warnings {dev.Warnings.Count}" : cfgErr);
@@ -233,7 +260,7 @@ public static partial class SelfTest
         // ---- H2 bus B, then back to A
         if (bseconds > 0)
         {
-            var cfgB = icd.Length > 0 && File.Exists(icd) ? IcdFrame(icd, otherBus, period) : SiteFrame(rt, wc, period, otherBus);
+            var cfgB = icd.Length > 0 && File.Exists(icd) ? IcdFrame(icd, otherBus, period) : prof != null && prof.Messages.Count > 0 ? prof.ToConfig(otherBus) : SiteFrame(rt, wc, period, otherBus);
             var h2 = await RunPhase(dev, cfgB, bseconds, poll, "h2_bus" + otherBus);
             GB("site_h2_run", h2.Err.Length == 0, h2.Err.Length > 0 ? h2.Err : $"{h2.WallS:F1} s on bus {otherBus}, bc records {h2.Bc.Count}, bm records {h2.Bm.Count}");
             Analyse("site_h2_bc", h2.Bc, rt, 4, period, h2.WallS, otherBus, expect, counter, h2.Missed, dev.BcTransactionRecords, h2.Marks, cfgB.Messages.Where(m => m.Enabled).Sum(m => (long)Math.Round(h2.WallS * 1000 / m.PeriodMs)));

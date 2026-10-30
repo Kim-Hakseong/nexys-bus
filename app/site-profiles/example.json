@@ -1,0 +1,23 @@
+{
+  "name": "example",
+  "description": "A remote terminal at address 4 on bus B with two receive and two transmit subaddresses, one transmit subaddress without data, and two mode codes. Copy this file next to your measurement results and edit it; keep real terminal data out of the repository.",
+  "rt": 4,
+  "bus": "B",
+  "periodMs": 20,
+  "monitorChannel": 1,
+  "messages": [
+    { "name": "RT4_SA1_RX", "sa": 1, "tr": 0, "wc": 15, "periodMs": 20, "source": { "kind": "sine", "value": 1000, "amplitude": 500, "periodS": 2 } },
+    { "name": "RT4_SA2_RX", "sa": 2, "tr": 0, "wc": 15, "periodMs": 20, "source": { "kind": "ramp", "value": 0, "amplitude": 1000, "periodS": 10 } },
+    { "name": "RT4_SA3_TX", "sa": 3, "tr": 1, "wc": 30, "periodMs": 20 },
+    { "name": "RT4_SA4_TX", "sa": 4, "tr": 1, "wc": 30, "periodMs": 20 },
+    { "name": "RT4_SA24_TX", "sa": 24, "tr": 1, "wc": 32, "periodMs": 100 },
+    { "name": "RT4_MC16_VECTOR", "modeCode": 16, "tr": 1, "periodMs": 100 },
+    { "name": "RT4_MC17_SYNC", "modeCode": 17, "tr": 0, "periodMs": 100 }
+  ],
+  "expect": {
+    "3": { "1": "0081" },
+    "4": { "8": "FFFE" }
+  },
+  "counter": { "sa": 4, "word": 1, "msPerTick": 10 },
+  "notes": "Wiring and ownership of the terminal go here; the self-test copies this text into its log."
+}

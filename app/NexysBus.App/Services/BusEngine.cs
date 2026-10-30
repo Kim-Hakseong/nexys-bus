@@ -116,7 +116,7 @@ public sealed class BusEngine : EngineBase
     public List<object> Devices()
     {
         var l = new List<object> { new { id = "virtual", kind = "virtual", name = "Virtual bus", detail = "software BC + simulated RTs + monitor", available = true } };
-        for (int i = 0; i < _cards.Count; i++) l.Add(new { id = $"hw{i}", kind = _cards[i].Kind, name = _cards[i].Name, detail = _cards[i].Detail, available = true });
+        for (int i = 0; i < _cards.Count; i++) l.Add(new { id = $"hw{i}", kind = _cards[i].Kind, name = _cards[i].Name, detail = _cards[i].Detail, available = true, channels = _cards[i].Channels?.Select(c => new { c.Channel, c.Is1553, c.MultiMode, c.ConcurrentMonitor, text = c.Text }).ToList() });
         return l;
     }
     /// <summary>SEARCH HARDWARE: reload the binding file, enumerate the cards through the driver (empty without a binding), report in the status line.</summary>
