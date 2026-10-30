@@ -35,6 +35,20 @@ public static partial class SelfTest
         return cfg;
     }
 
+    /// <summary>Frame from an ICD CSV (every message on <paramref name="bus"/>, period from the ICD, nothing simulated) — the site structure file.</summary>
+    static BusConfig IcdFrame(string path, string bus, double defaultPeriodMs)
+    {
+        var hub = IcdHub.FromCsv(path); var cfg = new BusConfig(); int order = 0;
+        foreach (var m in hub.Messages)
+        {
+            var bm = BusMessage.FromIcd(m, order++); bm.Bus = bus; bm.SimulateRt = false; if (bm.PeriodMs <= 0) bm.PeriodMs = defaultPeriodMs;
+            if (bm.Tr == 0 && bm.Words.Count > 0) bm.Source = bm.Sa == 1 ? new BusDataSource { Kind = "sine", Value = 1000, Amplitude = 500, PeriodS = 2 } : bm.Sa == 2 ? new BusDataSource { Kind = "ramp", Value = 0, Amplitude = 1000, PeriodS = 10 } : new BusDataSource { Kind = "const", Value = 0x5A5A };
+            cfg.Messages.Add(bm);
+        }
+        cfg.MinorFrameMs = cfg.Messages.Count > 0 ? cfg.Messages.Min(m => m.PeriodMs) : defaultPeriodMs;
+        return cfg;
+    }
+
     static Dictionary<int, Dictionary<int, ushort>> ParseExpect(string s)
     {
         var d = new Dictionary<int, Dictionary<int, ushort>>();
@@ -50,10 +64,13 @@ public static partial class SelfTest
     static double Med(List<double> v) { if (v.Count == 0) return 0; var s = v.OrderBy(x => x).ToList(); return s[s.Count / 2]; }
     static void SaveMon(List<BusRecord> recs, string path) { if (recs.Count == 0) return; var live = Mil1553File.Live(path); foreach (var r in recs) live.Append(r.TimeUs, r.Activity, r.Error, r.Cwd1, r.Cwd2, r.Swd1, r.Swd2, r.Data, r.RespTime1, r.RespTime2); live.SaveAs(path); }
 
-    static async Task<Phase> RunPhase(HardwareBusDevice dev, BusConfig cfg, double seconds, int pollMs, string tag)
+    static async Task<Phase> RunPhase(HardwareBusDevice dev, BusConfig cfg, double seconds, int pollMs, string tag, bool retain = true, int keepSa = -1, int keepWord = 0)
     {
-        var r = new Phase { Tag = tag }; var buf = new List<BusRecord>();
-        void Split() { foreach (var rec in buf) { if (((rec.Activity >> 12) & 0xF) == dev.Channel) r.Bc.Add(rec); else r.Bm.Add(rec); } }
+        var r = new Phase { Tag = tag }; var buf = new List<BusRecord>(); Mil1553File? live = retain ? null : Mil1553File.Live(Path.Combine(OutDir, tag + "_bc.mon"));
+        // retain = false (memory measurement, the application's own behaviour): records go to the live capture only; the analysis keeps
+        // data-less copies (plus the counter word of the counter subaddress) so the gates still run
+        BusRecord Slim(BusRecord x) { if (x.Tr == 1 && x.Sa == keepSa && x.Data.Length > keepWord) return x with { Data = new[] { x.Data[keepWord], x.Data[keepWord] } }; return x with { Data = Array.Empty<ushort>() }; }
+        void Split() { foreach (var rec in buf) { if (!retain) { live!.Append(rec.TimeUs, rec.Activity, rec.Error, rec.Cwd1, rec.Cwd2, rec.Swd1, rec.Swd2, rec.Data, rec.RespTime1, rec.RespTime2); } var keep = retain ? rec : Slim(rec); if (((rec.Activity >> 12) & 0xF) == dev.Channel) r.Bc.Add(keep); else r.Bm.Add(keep); } }
         try
         {
             dev.Configure(cfg); r.Warnings.AddRange(dev.Warnings); foreach (var w in dev.Warnings) L($"{tag} warning: {w}");
@@ -72,15 +89,15 @@ public static partial class SelfTest
             r.WallS = run.Elapsed.TotalSeconds; r.PollMean = sum / Math.Max(1, r.Polls); r.Missed = dev.MissedTransactions; r.BlockReads = dev.BlockReads;
         }
         catch (Exception ex) { r.Err = ex.Message; L($"{tag} exception: {ex}"); try { dev.Stop(); } catch { } }
-        try { SaveMon(r.Bc, Path.Combine(OutDir, tag + "_bc.mon")); SaveMon(r.Bm, Path.Combine(OutDir, tag + "_bm.mon")); } catch (Exception ex) { L("save failed " + ex.Message); }
+        try { if (retain) { SaveMon(r.Bc, Path.Combine(OutDir, tag + "_bc.mon")); SaveMon(r.Bm, Path.Combine(OutDir, tag + "_bm.mon")); } else live!.SaveAs(Path.Combine(OutDir, tag + "_bc.mon")); } catch (Exception ex) { L("save failed " + ex.Message); }
         L($"{tag}: {r.WallS:F1} s, polls {r.Polls} (mean {r.PollMean:F2} ms, max {r.PollMax:F1} ms), bc records {r.Bc.Count}, bm records {r.Bm.Count}, missed(est) {r.Missed}{(r.Err.Length > 0 ? ", ERROR " + r.Err : "")}");
         return r;
     }
 
     /// <summary>Gates of one phase on one record stream (BC transactions or the monitor channel).</summary>
-    static void Analyse(string tag, List<BusRecord> recs, int rt, int sas, double periodMs, double seconds, string expectBus, Dictionary<int, Dictionary<int, ushort>> expect, (int sa, int w) counter, long missed, bool transactionMode, List<(double wallS, ulong tagUs)> marks)
+    static void Analyse(string tag, List<BusRecord> recs, int rt, int sas, double periodMs, double seconds, string expectBus, Dictionary<int, Dictionary<int, ushort>> expect, (int sa, int w) counter, long missed, bool transactionMode, List<(double wallS, ulong tagUs)> marks, long expectedOverride = -1)
     {
-        double perUs = periodMs * 1000; long expected = (long)Math.Round(sas * seconds * 1000 / periodMs);
+        double perUs = periodMs * 1000; long expected = expectedOverride >= 0 ? expectedOverride : (long)Math.Round(sas * seconds * 1000 / periodMs);
         var mine = recs.Where(r => r.Rt == rt).ToList();
         G($"{tag}_records", recs.Count, ""); G($"{tag}_rt{rt}_records", mine.Count, ""); G($"{tag}_other_rt_records", recs.Count - mine.Count, "");
         long cmds = mine.Count + (transactionMode ? missed : 0);
@@ -107,6 +124,22 @@ public static partial class SelfTest
         G($"{tag}_dt_median_us", med, "us", $"={perUs} ±1%"); G($"{tag}_dt_error_pct", errPct, "%", "<=1"); G($"{tag}_out_of_order", outOfOrder, "", "<=0.1%"); G($"{tag}_out_of_order_pct", oooPct, "%", "<=0.1");
         GB($"{tag}_timetags", dts.Count >= 5 && errPct <= 1 && oooPct <= 0.1, $"SA1 {dts.Count} intervals, median {med:F0} us vs period {perUs:F0} us ({errPct:F2} %), out-of-order pairs {outOfOrder} ({oooPct:F3} %), first 0x{(mine.Count > 0 ? mine[0].TimeUs : 0):X} high word {(mine.Count > 0 ? mine[0].TimeUs >> 32 : 0)}");
         if (marks.Count >= 2) { var a = marks[0]; var b = marks[^1]; double ratio = (b.wallS - a.wallS) > 0 ? ((double)b.tagUs - a.tagUs) / ((b.wallS - a.wallS) * 1e6) : 0; G($"{tag}_timetag_per_wall_us", ratio, "", "=1 ±1%"); GB($"{tag}_timetag_unit_us", Math.Abs(ratio - 1) <= 0.01, $"time tag advance / wall clock = {ratio:F5} (1.0 = microseconds) over {b.wallS - a.wallS:F1} s"); }
+        // word-count / data-count errors (the terminal's configured buffer sizes vs the commanded WC) and the other error bits
+        long dcErr = mine.Count(r => (r.Error & 0x0800) != 0), anyErr = mine.Count(r => (r.Error & 0x4000) != 0);
+        G($"{tag}_datacount_errors", dcErr, "", "=0"); GB($"{tag}_data_count", mine.Count > 0 && dcErr == 0, $"DATA COUNT (0x0800) errors {dcErr}, ANY ERROR (0x4000) {anyErr} in {mine.Count} records; per command: " + string.Join(" ", mine.GroupBy(r => r.Cwd1).OrderBy(g => g.Key).Select(g => $"{(g.First().Sa is 0 or 31 ? "MC" + (g.Key & 0x1f) : "SA" + g.First().Sa)}{(g.First().Tr == 1 ? "T" : "R")}:{g.Count()}/{g.Count(r => r.HasError)}err")));
+        // mode codes: the vector word (MC16 → one data word from the RT) and the status word around a synchronize-with-data (MC17)
+        var mc16 = mine.Where(r => r.Sa is 0 or 31 && (r.Cwd1 & 0x1f) == 16).ToList();
+        if (mc16.Count > 0) { var vals = mc16.Where(r => r.Data.Length > 0).Select(r => r.Data[0]).Distinct().OrderBy(x => x).ToList(); G($"{tag}_mc16_records", mc16.Count, ""); G($"{tag}_mc16_no_response", mc16.Count(r => (r.Error & 0x8000) != 0), "", "=0"); GB($"{tag}_mc16_vector_word", mc16.Count > 0 && mc16.All(r => (r.Error & 0x8000) == 0) && mc16.All(r => r.Data.Length == 1), $"MC16 transmit vector word: {mc16.Count} commands, data words per record {string.Join("/", mc16.Select(r => r.Data.Length).Distinct())}, vector values: {string.Join(" ", vals.Take(12).Select(v => $"0x{v:X4}"))}{(vals.Count > 12 ? " …" : "")}, swd1 {string.Join(" ", mc16.Select(r => r.Swd1).Distinct().Select(v => $"0x{v:X4}"))}"); }
+        var mc17 = mine.Where(r => r.Sa is 0 or 31 && (r.Cwd1 & 0x1f) == 17).ToList();
+        if (mc17.Count > 0)
+        {
+            var afterSw = new List<ushort>(); var beforeSw = new List<ushort>();
+            foreach (var m17 in mc17) { var after = mine.FirstOrDefault(r => r.TimeUs > m17.TimeUs && !(r.Sa is 0 or 31) && (r.Error & 0x8000) == 0); var before = mine.LastOrDefault(r => r.TimeUs < m17.TimeUs && !(r.Sa is 0 or 31) && (r.Error & 0x8000) == 0); if (after.Cwd1 != 0) afterSw.Add(after.Swd1); if (before.Cwd1 != 0) beforeSw.Add(before.Swd1); }
+            G($"{tag}_mc17_records", mc17.Count, ""); G($"{tag}_mc17_no_response", mc17.Count(r => (r.Error & 0x8000) != 0), "", "=0");
+            GB($"{tag}_mc17_sync", mc17.Count > 0 && mc17.All(r => (r.Error & 0x8000) == 0), $"MC17 synchronize with data word: {mc17.Count} commands (data sent {string.Join("/", mc17.Select(r => r.Data.Length).Distinct())} words), swd1 of the MC17 itself {string.Join(" ", mc17.Select(r => r.Swd1).Distinct().Select(v => $"0x{v:X4}"))}, status word of the next SA message after MC17 {string.Join(" ", afterSw.Distinct().Select(v => $"0x{v:X4}"))} vs before {string.Join(" ", beforeSw.Distinct().Select(v => $"0x{v:X4}"))} → {(afterSw.Distinct().SequenceEqual(beforeSw.Distinct()) ? "no status change" : "status changed")}");
+        }
+        var sa24 = mine.Where(r => r.Sa == 24).ToList();
+        if (sa24.Count > 0) G($"{tag}_sa24_records", sa24.Count, ""); if (sa24.Count > 0) GB($"{tag}_sa24_response", sa24.All(r => (r.Error & 0x8000) == 0), $"SA24 RT→BC: {sa24.Count} commands, NO RESPONSE {sa24.Count(r => (r.Error & 0x8000) != 0)}, data words {string.Join("/", sa24.Select(r => r.Data.Length).Distinct())}, DATA COUNT errors {sa24.Count(r => (r.Error & 0x0800) != 0)}, first words {(sa24[^1].Data.Length > 0 ? string.Join(" ", sa24[^1].Data.Take(8).Select(w => w.ToString("X4"))) : "-")}");
         // response time
         var rts = ok.Where(r => r.RespTime1 > 0).Select(r => (double)r.RespTime1).ToList(); G($"{tag}_resptime1_median", Med(rts), "raw", "unit: 0.1 us (UNVERIFIED)"); G($"{tag}_resptime1_min", rts.Count > 0 ? rts.Min() : 0, "raw"); G($"{tag}_resptime1_max", rts.Count > 0 ? rts.Max() : 0, "raw");
         // RT→BC words vs the terminal's own display
@@ -159,7 +192,7 @@ public static partial class SelfTest
         int card = int.Parse(Arg("--card", "0")), channel = int.Parse(Arg("--channel", "0")), mon = int.Parse(Arg("--mon", "1")), rt = int.Parse(Arg("--rt", "4")), wc = int.Parse(Arg("--wc", "32")), poll = int.Parse(Arg("--poll", "10"));
         double period = double.Parse(Arg("--period", "20"), System.Globalization.CultureInfo.InvariantCulture), seconds = double.Parse(Arg("--seconds", "30"), System.Globalization.CultureInfo.InvariantCulture), bseconds = double.Parse(Arg("--bseconds", "30"), System.Globalization.CultureInfo.InvariantCulture), minutes = double.Parse(Arg("--minutes", "10"), System.Globalization.CultureInfo.InvariantCulture), tagUnit = double.Parse(Arg("--tagunit", "1"), System.Globalization.CultureInfo.InvariantCulture);
         var expect = ParseExpect(Arg("--expect", "sa3:0=8000,1=0081,8=93C7,10=EB0D;sa4:8=FFFE,9=FFFE,10=FFFE")); var cp = Arg("--counter", "sa4:1").Split(':'); var counter = (sa: int.Parse(cp[0][2..]), w: int.Parse(cp[1]));
-        string mainBus = Arg("--bus", "A").ToUpperInvariant() == "B" ? "B" : "A", otherBus = mainBus == "A" ? "B" : "A";
+        string mainBus = Arg("--bus", "A").ToUpperInvariant() == "B" ? "B" : "A", otherBus = mainBus == "A" ? "B" : "A"; string icd = Arg("--icd"); bool retain = Arg("--retain", "1") != "0";
         L($"site: card {card} channel {channel} monitor channel {mon} RT {rt} WC {wc} period {period} ms poll {poll} ms, H1 {seconds} s on bus {mainBus}, H2 {bseconds} s on bus {otherBus}, H3 {minutes} min on bus {mainBus}");
         // ---- H0 binding, enumerate, open, channel capabilities
         string bindingArg = Arg("--binding");
@@ -177,9 +210,10 @@ public static partial class SelfTest
         foreach (int ch in new[] { channel, mon }.Where(c => c >= 0).Distinct()) { uint mm = dev.ChannelInfo(DriverConst.Info1553MultiMode, ch), cm = dev.ChannelInfo(DriverConst.Info1553ConcurMon, ch); caps.Add($"ch{ch}: multimode {mm} concurrent-monitor {cm}"); }
         GB("site_channel_info", true, string.Join(" | ", caps)); SiteSum["channels"] = caps;
         // ---- H0 configure once (frame A) to learn the channel's limits
-        var cfgA = SiteFrame(rt, wc, period, mainBus); string cfgErr = "";
+        var cfgA = icd.Length > 0 && File.Exists(icd) ? IcdFrame(icd, mainBus, period) : SiteFrame(rt, wc, period, mainBus); string cfgErr = "";
+        L($"frame: {(icd.Length > 0 ? icd : "built-in SA1..SA4")} — " + string.Join(", ", cfgA.Messages.Select(m => $"{m.Name}[{(m.IsModeCode ? "MC" + m.ModeCode : "SA" + m.Sa)}{(m.Tr == 1 ? "T" : "R")} wc {m.DataWords} {m.PeriodMs} ms]")));
         try { dev.Configure(cfgA); } catch (Exception ex) { cfgErr = ex.Message; }
-        GB("site_configure", cfgErr.Length == 0, cfgErr.Length == 0 ? $"{cfgA.Messages.Count} messages (RT {rt} SA1/SA2 BC→RT WC {wc}, SA3/SA4 RT→BC WC {wc}, {period} ms), {dev.CallLog.Count} driver calls, warnings {dev.Warnings.Count}" : cfgErr);
+        GB("site_configure", cfgErr.Length == 0, cfgErr.Length == 0 ? $"{cfgA.Messages.Count} messages ({(icd.Length > 0 ? Path.GetFileName(icd) : $"RT {rt} SA1/SA2 BC→RT WC {wc}, SA3/SA4 RT→BC WC {wc}")}, minor {dev.MinorFrameMs} ms major {dev.MajorFrameMs} ms), {dev.CallLog.Count} driver calls, warnings {dev.Warnings.Count}" : cfgErr);
         foreach (var wn in dev.Warnings) L("configure warning: " + wn);
         bool monCh = mon >= 0 && !dev.Warnings.Any(x => x.Contains("monitor channel"));
         GB("site_monitor_mode", cfgErr.Length == 0, $"BC channel monitor {(dev.MonitorOnBcChannel ? "yes (sequential monitor carries BC transactions)" : "no → message-block transaction records")}; monitor channel {(mon >= 0 ? mon.ToString() : "none")} {(mon >= 0 ? (monCh ? "configured" : "REFUSED") : "")}");
@@ -189,17 +223,18 @@ public static partial class SelfTest
         GB("site_h1_run", h1.Err.Length == 0 && h1.PollMax <= 200, h1.Err.Length > 0 ? h1.Err : $"{h1.WallS:F1} s, polls {h1.Polls}, poll mean {h1.PollMean:F2} ms max {h1.PollMax:F1} ms, block reads/poll {h1.BlockReads}");
         G("site_h1_poll_max_ms", h1.PollMax, "ms", "<=200"); G("site_h1_poll_mean_ms", h1.PollMean, "ms");
         GB("site_h1_ch1_wired", h1.Bm.Count > 0, mon < 0 ? "no monitor channel requested" : !monCh ? $"monitor channel {mon} refused by the driver" : h1.Bm.Count > 0 ? $"monitor channel {mon} saw {h1.Bm.Count} records while the BC ran on channel {channel} → wired to the same bus" : $"monitor channel {mon} saw 0 records in {h1.WallS:F0} s → not wired (or wired to another bus)");
-        Analyse("site_h1_bc", h1.Bc, rt, 4, period, h1.WallS, mainBus, expect, counter, h1.Missed, dev.BcTransactionRecords, h1.Marks);
+        int sas = cfgA.Messages.Count(m => m.Enabled && Math.Abs(m.PeriodMs - cfgA.Messages.Min(x => x.PeriodMs)) < 1e-9); long expectedH1 = cfgA.Messages.Where(m => m.Enabled).Sum(m => (long)Math.Round(h1.WallS * 1000 / m.PeriodMs));
+        Analyse("site_h1_bc", h1.Bc, rt, 4, period, h1.WallS, mainBus, expect, counter, h1.Missed, dev.BcTransactionRecords, h1.Marks, expectedH1);
         if (h1.Bm.Count > 0) Analyse("site_h1_bm", h1.Bm, rt, 4, period, h1.WallS, mainBus, expect, counter, 0, false, h1.Marks);
         WriteSaValues("h1", h1.Bm.Count > 0 ? h1.Bm : h1.Bc, rt);
         int lastCounterH1 = (h1.Bm.Count > 0 ? h1.Bm : h1.Bc).Where(r => r.Rt == rt && r.Tr == 1 && r.Sa == counter.sa && (r.Error & 0x8000) == 0 && r.Data.Length > counter.w).Select(r => (int)r.Data[counter.w]).LastOrDefault(-1);
         // ---- H2 bus B, then back to A
         if (bseconds > 0)
         {
-            var cfgB = SiteFrame(rt, wc, period, otherBus);
+            var cfgB = icd.Length > 0 && File.Exists(icd) ? IcdFrame(icd, otherBus, period) : SiteFrame(rt, wc, period, otherBus);
             var h2 = await RunPhase(dev, cfgB, bseconds, poll, "h2_bus" + otherBus);
             GB("site_h2_run", h2.Err.Length == 0, h2.Err.Length > 0 ? h2.Err : $"{h2.WallS:F1} s on bus {otherBus}, bc records {h2.Bc.Count}, bm records {h2.Bm.Count}");
-            Analyse("site_h2_bc", h2.Bc, rt, 4, period, h2.WallS, otherBus, expect, counter, h2.Missed, dev.BcTransactionRecords, h2.Marks);
+            Analyse("site_h2_bc", h2.Bc, rt, 4, period, h2.WallS, otherBus, expect, counter, h2.Missed, dev.BcTransactionRecords, h2.Marks, cfgB.Messages.Where(m => m.Enabled).Sum(m => (long)Math.Round(h2.WallS * 1000 / m.PeriodMs)));
             if (h2.Bm.Count > 0) Analyse("site_h2_bm", h2.Bm, rt, 4, period, h2.WallS, otherBus, expect, counter, 0, false, h2.Marks);
             int firstCounterH2 = (h2.Bm.Count > 0 ? h2.Bm : h2.Bc).Where(r => r.Rt == rt && r.Tr == 1 && r.Sa == counter.sa && (r.Error & 0x8000) == 0 && r.Data.Length > counter.w).Select(r => (int)r.Data[counter.w]).FirstOrDefault(-1);
             if (lastCounterH1 >= 0 && firstCounterH2 >= 0) { int gap = firstCounterH2 - lastCounterH1; if (gap < 0) gap += 65536; G("site_h2_counter_gap_ticks", gap, "ticks", $"switch {mainBus}→{otherBus} (reconfigure + restart)"); }
@@ -210,11 +245,11 @@ public static partial class SelfTest
         // ---- H3 long run
         if (minutes > 0)
         {
-            long ws0 = WsMb(); var h3 = await RunPhase(dev, cfgA, minutes * 60, poll, "h3");
-            long ws1 = WsMb(); var src = h3.Bm.Count > 0 ? h3.Bm : h3.Bc;
-            GB("site_h3_run", h3.Err.Length == 0, h3.Err.Length > 0 ? h3.Err : $"{h3.WallS / 60:F1} min, polls {h3.Polls}, poll max {h3.PollMax:F1} ms, bc records {h3.Bc.Count}, bm records {h3.Bm.Count}");
-            G("site_h3_memory_delta_mb", ws1 - ws0, "MB", "<=50"); GB("site_h3_memory", ws1 - ws0 <= 50, $"working set {ws0} → {ws1} MB");
-            Analyse("site_h3_bc", h3.Bc, rt, 4, period, h3.WallS, mainBus, expect, counter, h3.Missed, dev.BcTransactionRecords, h3.Marks);
+            GC.Collect(); GC.WaitForPendingFinalizers(); long ws0 = WsMb(); var h3 = await RunPhase(dev, cfgA, minutes * 60, poll, "h3", retain, counter.sa, counter.w);
+            GC.Collect(); GC.WaitForPendingFinalizers(); long ws1 = WsMb(); var src = h3.Bm.Count > 0 ? h3.Bm : h3.Bc;
+            GB("site_h3_run", h3.Err.Length == 0, h3.Err.Length > 0 ? h3.Err : $"{h3.WallS / 60:F1} min, polls {h3.Polls}, poll max {h3.PollMax:F1} ms, bc records {h3.Bc.Count}, bm records {h3.Bm.Count}, retain {retain}");
+            G("site_h3_memory_delta_mb", ws1 - ws0, "MB", "<=50"); GB("site_h3_memory", ws1 - ws0 <= 50, $"working set {ws0} → {ws1} MB after GC ({(retain ? "self-test keeps every record in memory" : "records only in the live capture, as the application does")})");
+            Analyse("site_h3_bc", h3.Bc, rt, 4, period, h3.WallS, mainBus, retain ? expect : new(), counter, h3.Missed, dev.BcTransactionRecords, h3.Marks, cfgA.Messages.Where(m => m.Enabled).Sum(m => (long)Math.Round(h3.WallS * 1000 / m.PeriodMs)));
             if (h3.Bm.Count > 0) Analyse("site_h3_bm", h3.Bm, rt, 4, period, h3.WallS, mainBus, expect, counter, 0, false, h3.Marks);
             WriteSaValues("h3", src, rt);
             // per-minute counts and no-response episodes (the terminal stopped / restarted by the operator)
