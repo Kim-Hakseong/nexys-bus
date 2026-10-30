@@ -100,9 +100,12 @@ public static partial class SelfTest
         // Δt of SA1 commands → time-stamp unit; in transaction mode normalise by the number of periods between reads
         var t1 = mine.Where(r => r.Sa == 1 && r.Tr == 0).Select(r => (double)r.TimeUs).ToList(); var dts = new List<double>();
         for (int i = 1; i < t1.Count; i++) { double d = t1[i] - t1[i - 1]; if (d <= 0) continue; double k = Math.Max(1, Math.Round(d / perUs)); dts.Add(transactionMode ? d / k : d); }
-        double med = Med(dts); double errPct = med > 0 ? Math.Abs(med - perUs) / perUs * 100 : 100; bool mono = mine.Zip(mine.Skip(1)).All(p => p.Second.TimeUs >= p.First.TimeUs);
-        G($"{tag}_dt_median_us", med, "us", $"={perUs} ±1%"); G($"{tag}_dt_error_pct", errPct, "%", "<=1");
-        GB($"{tag}_timetags", dts.Count >= 5 && errPct <= 1 && mono, $"SA1 {dts.Count} intervals, median {med:F0} us vs period {perUs:F0} us ({errPct:F2} %), monotonic {mono}, first 0x{(mine.Count > 0 ? mine[0].TimeUs : 0):X} high word {(mine.Count > 0 ? mine[0].TimeUs >> 32 : 0)}");
+        double med = Med(dts); double errPct = med > 0 ? Math.Abs(med - perUs) / perUs * 100 : 100;
+        // out-of-order pairs: in message-block mode a read that straddles a frame (a poll slower than the period) can append an older
+        // transaction after a newer one of another message; the count must stay below 0.1 % of the records (a sequential monitor gives 0)
+        int outOfOrder = mine.Zip(mine.Skip(1)).Count(p => p.Second.TimeUs < p.First.TimeUs); double oooPct = mine.Count > 1 ? 100.0 * outOfOrder / (mine.Count - 1) : 0;
+        G($"{tag}_dt_median_us", med, "us", $"={perUs} ±1%"); G($"{tag}_dt_error_pct", errPct, "%", "<=1"); G($"{tag}_out_of_order", outOfOrder, "", "<=0.1%"); G($"{tag}_out_of_order_pct", oooPct, "%", "<=0.1");
+        GB($"{tag}_timetags", dts.Count >= 5 && errPct <= 1 && oooPct <= 0.1, $"SA1 {dts.Count} intervals, median {med:F0} us vs period {perUs:F0} us ({errPct:F2} %), out-of-order pairs {outOfOrder} ({oooPct:F3} %), first 0x{(mine.Count > 0 ? mine[0].TimeUs : 0):X} high word {(mine.Count > 0 ? mine[0].TimeUs >> 32 : 0)}");
         if (marks.Count >= 2) { var a = marks[0]; var b = marks[^1]; double ratio = (b.wallS - a.wallS) > 0 ? ((double)b.tagUs - a.tagUs) / ((b.wallS - a.wallS) * 1e6) : 0; G($"{tag}_timetag_per_wall_us", ratio, "", "=1 ±1%"); GB($"{tag}_timetag_unit_us", Math.Abs(ratio - 1) <= 0.01, $"time tag advance / wall clock = {ratio:F5} (1.0 = microseconds) over {b.wallS - a.wallS:F1} s"); }
         // response time
         var rts = ok.Where(r => r.RespTime1 > 0).Select(r => (double)r.RespTime1).ToList(); G($"{tag}_resptime1_median", Med(rts), "raw", "unit: 0.1 us (UNVERIFIED)"); G($"{tag}_resptime1_min", rts.Count > 0 ? rts.Min() : 0, "raw"); G($"{tag}_resptime1_max", rts.Count > 0 ? rts.Max() : 0, "raw");

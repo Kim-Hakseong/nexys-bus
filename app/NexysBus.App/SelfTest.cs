@@ -82,8 +82,9 @@ public static partial class SelfTest
         // ---- 1) start screen: NEW PROJECT / OPEN / recent / hardware search (disabled)
         int startBtns = (await JS(w, "await nx.test.rail('START'); return document.querySelectorAll('.start [data-a]').length;")).GetInt32();
         bool hwDisabled = (await JS(w, "const b = document.querySelector('.start [data-a=searchHw]'); return !!b && b.disabled;")).GetBoolean();
+        bool bound = (await JS(w, "return !!(nx.test.state().driver && nx.test.state().driver.bound);")).GetBoolean();   // SEARCH HARDWARE is enabled exactly when a driver.json binding exists on this PC
         int rails = (await JS(w, "return document.querySelectorAll('.rail [data-rail]').length;")).GetInt32();
-        GB("start_screen", startBtns >= 3 && hwDisabled && rails == 5, $"buttons={startBtns} hardwareSearchDisabled={hwDisabled} rails={rails}");
+        GB("start_screen", startBtns >= 3 && hwDisabled == !bound && rails == 5, $"buttons={startBtns} hardwareSearchDisabled={hwDisabled} driverBound={bound} rails={rails}");
         await Shot(w, "bus_01_start");
         // ---- 2) new project → PROJECT rail: device list (virtual available), bus settings inputs
         await JS(w, "await nx.test.clickSel('.start [data-a=newProject]'); return true;"); await Idle(w, 200);
