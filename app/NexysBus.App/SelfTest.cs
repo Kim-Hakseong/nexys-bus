@@ -153,6 +153,14 @@ public static partial class SelfTest
         var trendEl = trendJs.ValueKind == System.Text.Json.JsonValueKind.String ? System.Text.Json.JsonDocument.Parse(trendJs.GetString()!).RootElement : trendJs;
         int trendCurves = trendEl.TryGetProperty("curves", out var tc) ? tc.GetInt32() : -1;
         GB("analyze_trend_on_run_capture", trendCurves >= 1, $"TREND curves on the batch capture after ▸ trend = {trendCurves} ({trendEl.GetRawText()})");
+        // ---- 7c) TREND opened during a live run keeps growing (no second click): points of the curve's channel at ~1 s vs ~3 s
+        await JS(w, "await nx.test.rail('SIMULATE'); await nx.test.clickSel('.simulate [data-a=start]'); return true;"); await Idle(w, 1200);
+        var liveDf = e.State.Files.LastOrDefault(f => f.Format == "MIL1553");
+        await JS(w, "await nx.test.rail('ANALYZE'); await nx.test.settle(); await new Promise(z => setTimeout(z, 400)); await nx.test.m1553().scrollTo(0); const rs = Array.from(document.querySelectorAll('.m1553-scroll .trow[data-row]')); for (const r of rs.slice(0, 12)) { await nx.test.m1553().selectRow(+r.dataset.row); await new Promise(z => setTimeout(z, 300)); if (document.querySelector('.m1553-dec tr[data-ch]')) break; } await nx.test.m1553().trendFirst(); return true;");
+        long PointsOfTrend() { var ch = e.Charts.FirstOrDefault(c => c.PageId == 0 && c.WindowId == 0); var cv = ch?.Model.Curves.FirstOrDefault(); return cv == null ? -1 : cv.Channel.Length; }
+        long p1 = PointsOfTrend(); await Task.Delay(2500); long p2 = PointsOfTrend();
+        await JS(w, "await nx.test.rail('SIMULATE'); await nx.test.clickSel('.simulate [data-a=stop]'); return true;"); await Idle(w, 300);
+        GB("analyze_trend_live_grows", p1 > 0 && p2 > p1, $"live run {liveDf?.Name}: trend curve points {p1} → {p2} after 2.5 s without re-clicking");
         await JS(w, "await nx.test.m1553().scrollTo(0); const r = document.querySelector('.m1553-scroll .trow[data-i]'); await nx.test.m1553().selectRow(+r.dataset.row); return true;");
         await Shot(w, "bus_07_analyze_errors");
         await JS(w, "return JSON.stringify(await nx.test.m1553().filter({errorsOnly: false}));");

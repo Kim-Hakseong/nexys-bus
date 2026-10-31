@@ -92,6 +92,26 @@ public sealed class SimulationService
         if (_df == null || _live == null || _e.Mil1553.Hub == null || !_e.Mil1553.IcdApplied) return;
         if (!force && (_live.Count == _attachedAt || _attachClock.ElapsedMilliseconds < 1000)) return;
         Mil1553DataSource.AttachIcd(_df, _e.Mil1553.Hub); _attachedAt = _live.Count; _attachClock.Restart();
+        RebindCurves();
+    }
+
+    // AttachIcd replaces the capture's ICD channels; curves already showing one of them (ANALYZE › TREND, or any chart) still hold the
+    // old channel object with the old record set — swap each such curve for the new channel of the same id so a trend opened during
+    // the run keeps growing without a second click.
+    void RebindCurves()
+    {
+        if (_df == null) return; string prefix = _df.Name + "|ICD:"; var touched = new HashSet<int>();
+        foreach (var chart in _e.Charts.ToList())
+        {
+            var curves = chart.Model.Curves;
+            for (int i = curves.Count - 1; i >= 0; i--)
+            {
+                var old = curves[i].Channel; if (!old.Id.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                var fresh = _e.Find(old.Id); if (fresh == null || ReferenceEquals(fresh, old)) continue;
+                _e.RemoveCurve(chart.Id, i, record: false); _e.AddCurve(chart.Id, old.Id, "plot", record: false); touched.Add(chart.Id);
+            }
+        }
+        foreach (int id in touched) _e.TouchChart(id);
     }
 
     public void Stop()
