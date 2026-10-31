@@ -9,10 +9,10 @@
 C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-core](https://github.com/Kim-Hakseong/nexys-core) submodule
 
 ## 데모 영상 — 실제 카드 ↔ HIL 시뮬레이터 RT 4 양방향 검증
-[![NexysBus 데모 (클릭하면 전체 영상)](docs/media/nexysbus-demo-preview.gif)](docs/media/nexysbus-demo.mp4)
+[![NexysBus 데모 (클릭하면 전체 영상)](docs/media/nexysbus-demo-preview.gif)](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo.mp4)
 
 USB 1553 카드(단일 기능 채널 2개)를 BC로 HIL 시뮬레이터의 RT 4(버스 B)와 주고받는 장면입니다. 카드 인식 → 프레임 로드·START → SA4 시간 카운터·SA3 상태 워드를 양쪽 화면에서 비교 → 상대 RT를 멈추면 NO RESPONSE가 쌓이고 다시 켜면 복구 → 통계.
-**전체 영상(2분 6초)**: [nexysbus-demo.mp4](docs/media/nexysbus-demo.mp4) · **60초 요약**: [nexysbus-demo-60s.mp4](docs/media/nexysbus-demo-60s.mp4) · 자막: [srt](docs/media/nexysbus-demo.srt)
+영상 파일은 [v0.3.0-beta.2 Release](https://github.com/Kim-Hakseong/nexys-bus/releases/tag/v0.3.0-beta.2)에 첨부돼 있습니다: **전체(2분 6초)** [nexysbus-demo.mp4](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo.mp4) · **60초 요약** [nexysbus-demo-60s.mp4](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo-60s.mp4) · 자막 [srt](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo.srt)
 
 ## 사용 가이드
 처음 쓰는 분은 **[사용 가이드](docs/guide/README.md)**부터 보세요 — 설치, 화면 구성, 5분 따라 하기, PROJECT · ICD · SIMULATE · ANALYZE 기능별 설명, 하드웨어 카드 연결, 자동화·현장 측정, 파일 형식·단축키·문제 해결(8장, 화면 그림 포함). 앱 안에서는 F1.

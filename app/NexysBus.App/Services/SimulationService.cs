@@ -80,7 +80,18 @@ public sealed class SimulationService
         if (_poller != null) { lock (_lock) { _buf.AddRange(_pending); _pending.Clear(); } if (_pollError.Length > 0) { LastError = _pollError; _e.SetStatus("Hardware poll failed: " + _pollError); _e.SetLed("error"); } }
         else _dev.Poll(_buf);
         foreach (var r in _buf) _live.Append(r.TimeUs, r.Activity, r.Error, r.Cwd1, r.Cwd2, r.Swd1, r.Swd2, r.Data, r.RespTime1, r.RespTime2);
-        if (_buf.Count > 0) _e.Mil1553.Refresh();
+        if (_buf.Count > 0) { ReattachIcd(false); _e.Mil1553.Refresh(); }
+    }
+
+    // The ICD engineering channels of a capture are built from the records present when they are attached (one group per message
+    // that has records). A run starts with an empty live capture, so they are rebuilt as the capture grows (at most once a second)
+    // and once more when the run stops — otherwise ANALYZE › TREND finds no channel for a live or BATCH capture and stays empty.
+    long _attachedAt = -1; readonly Stopwatch _attachClock = Stopwatch.StartNew();
+    void ReattachIcd(bool force)
+    {
+        if (_df == null || _live == null || _e.Mil1553.Hub == null || !_e.Mil1553.IcdApplied) return;
+        if (!force && (_live.Count == _attachedAt || _attachClock.ElapsedMilliseconds < 1000)) return;
+        Mil1553DataSource.AttachIcd(_df, _e.Mil1553.Hub); _attachedAt = _live.Count; _attachClock.Restart();
     }
 
     public void Stop()
@@ -89,6 +100,7 @@ public sealed class SimulationService
         _timer?.Stop(); _timer = null;
         try { StopPoller(); _dev.Stop(); Pump(); _dev.Close(); } catch (Exception ex) { Diag.Trace("sim stop " + ex); }
         _sw?.Stop();
+        ReattachIcd(true);
         try { if (_live != null && _live.Count > 0) { _live.SaveAs(_path); LastCapture = _path; } } catch (Exception ex) { LastError = ex.Message; Diag.Trace("capture save failed " + ex); }
         var c = _dev.Counters; string missed = _dev is HardwareBusDevice hs && hs.BcTransactionRecords ? $", {hs.MissedTransactions:N0} not read (BC message blocks)" : "";
         _e.SetLed("ready"); _e.SetStatus($"Bus stopped: {c.Messages:N0} messages, {c.Errors:N0} errors, load {c.LoadPct:F1} %{missed} → {Path.GetFileName(_path)}");

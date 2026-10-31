@@ -148,6 +148,11 @@ public static partial class SelfTest
         int nErr = (await JS(w, "return (await nx.test.m1553().filter({rt: -1, sa: -1, tr: -1, bus: -1, errorsOnly: true, text: ''})).n;")).GetInt32();
         long injected = got / 50;   // every 50th message gets "no response"
         GB("analyze_errors_only_equals_injected", nErr == injected, $"ERRORS ONLY rows={nErr} injected(no response)={injected} of {got}");
+        // ---- 7b) TREND on the run's own capture: the ICD channels must exist for a capture that started empty (regression 2026-10-31)
+        var trendJs = await JS(w, "await nx.test.m1553().filter({rt: -1, sa: -1, tr: -1, bus: -1, errorsOnly: false, text: ''}); await nx.test.settle(); await new Promise(z => setTimeout(z, 500)); await nx.test.m1553().scrollTo(0); const rs = Array.from(document.querySelectorAll('.m1553-scroll .trow[data-row]')); for (const r of rs.slice(0, 12)) { await nx.test.m1553().selectRow(+r.dataset.row); await new Promise(z => setTimeout(z, 300)); if (document.querySelector('.m1553-dec tr[data-ch]')) break; } if (!document.querySelector('.m1553-dec tr[data-ch]')) return JSON.stringify({ curves: -2, rows: rs.length, dec: (document.querySelector('.m1553-dec')?.textContent || '').slice(0, 300), icd: JSON.stringify(nx.test.state().m1553?.icd ?? null).slice(0, 200) }); const chart = await nx.test.m1553().trendFirst(); await new Promise(r => setTimeout(r, 600)); const c = (nx.test.state().charts || []).find(x => x.id === chart); return JSON.stringify({ chart, curves: c ? c.curves.length : -1 });");
+        var trendEl = trendJs.ValueKind == System.Text.Json.JsonValueKind.String ? System.Text.Json.JsonDocument.Parse(trendJs.GetString()!).RootElement : trendJs;
+        int trendCurves = trendEl.TryGetProperty("curves", out var tc) ? tc.GetInt32() : -1;
+        GB("analyze_trend_on_run_capture", trendCurves >= 1, $"TREND curves on the batch capture after ▸ trend = {trendCurves} ({trendEl.GetRawText()})");
         await JS(w, "await nx.test.m1553().scrollTo(0); const r = document.querySelector('.m1553-scroll .trow[data-i]'); await nx.test.m1553().selectRow(+r.dataset.row); return true;");
         await Shot(w, "bus_07_analyze_errors");
         await JS(w, "return JSON.stringify(await nx.test.m1553().filter({errorsOnly: false}));");

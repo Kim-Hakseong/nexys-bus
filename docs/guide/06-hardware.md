@@ -41,7 +41,7 @@ exe 옆(포터블은 실행한 exe가 있는 폴더) 또는 `%LOCALAPPDATA%\Nexy
 | 타임태그 | 마이크로초(벽시계 대비 1.0000–1.0006) |
 | 상대 RT 정지 → 재시작 | 정지 동안 NO RESPONSE(22초 4,535건), 재시작 즉시 응답 복구 |
 
-[데모 영상](../media/nexysbus-demo.mp4)에서 이 과정을 볼 수 있습니다.
+[데모 영상](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo.mp4)(Release 첨부)에서 이 과정을 볼 수 있습니다.
 
 ## 6.5 문제가 생기면
 | 증상 | 확인 |
