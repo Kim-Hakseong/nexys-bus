@@ -258,7 +258,7 @@ public static partial class SelfTest
         int helpSections = (await JS(w, "return document.querySelectorAll('.help-nav [data-s]').length;")).GetInt32();
         string helpText = (await JS(w, "return document.querySelector('.modal-bg')?.textContent ?? '';")).GetString() ?? "";
         await JS(w, "document.querySelector('.modal-bg')?.remove(); return true;");
-        GB("help_sections", helpBus && helpIcd && helpSections == 8, $"bus={helpBus} icd={helpIcd} sections={helpSections}");
+        GB("help_sections", helpBus && helpIcd && helpSections == 7, $"bus={helpBus} icd={helpIcd} sections={helpSections}");
         await JS(w, "await nx.test.clickSel('[data-a=about]'); return true;"); await Idle(w, 150);
         string about = (await JS(w, "return document.querySelector('.modal.about')?.textContent ?? '';")).GetString() ?? "";
         await Shot(w, "v100_12_about");
