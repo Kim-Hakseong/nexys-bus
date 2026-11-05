@@ -143,7 +143,7 @@ public sealed class BusEngine : EngineBase
         _cards = Driver == null ? new List<DeviceInfo>() : HardwareBusDevice.Enumerate(Driver, maxCards: Math.Clamp(Driver.MaxCards, 1, 16)).ToList();
         SetStatus(Driver == null ? "Hardware search: no driver binding on this PC (driver.json next to the exe or in %LOCALAPPDATA%\\NexysBus) — the virtual bus stays available"
             : _cards.Count == 0 ? (HardwareBusDevice.LastEnumerateError.Length > 0 ? "Hardware search: " + HardwareBusDevice.LastEnumerateError : $"Hardware search: the driver ({Path.GetFileName(Driver.CardLibrary)}) reports no card") : $"Hardware search: {_cards.Count} card(s) — pick one in PROJECT › DEVICE");
-        if (_cards.Count == 0 && Project.Device != "virtual") { Project.Device = "virtual"; Dirty = true; }
+        if (!Project.IsAfdx && _cards.Count == 0 && Project.Device != "virtual") { Project.Device = "virtual"; Dirty = true; }
         Touch(); return Devices();
     }
     /// <summary>ARINC 664 devices: the virtual network always; Ethernet ports when the packet-capture library is installed; the dedicated card slot.</summary>
@@ -153,6 +153,7 @@ public sealed class BusEngine : EngineBase
         return new List<object>
         {
             new { id = "virtual", kind = "virtual", name = "Virtual network", detail = "A/B loopback in software · delay, loss, duplication and skew injection", available = true },
+            new { id = "local", kind = "virtual", name = "Shared virtual network (this PC)", detail = "every NexysBus instance on this PC that picks it sees the frames of the others (loopback multicast, nothing leaves the PC) — e.g. one instance SIMULATEs, another ANALYZEs", available = true },
             new { id = "network", kind = "network", name = "Ethernet ports (A / B)", detail = pcap ? "packet-capture library found — pick the ports for network A and B below" : "needs the packet-capture library (Npcap, installed separately — not shipped with NexysBus)", available = pcap },
             new { id = "afdxcard", kind = "card", name = "AFDX end-system card", detail = "interface reserved for a vendor card adapter — not available in this release", available = false },
         };

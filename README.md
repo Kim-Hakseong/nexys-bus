@@ -4,7 +4,7 @@
 
 **MIL-STD-1553 버스 시뮬레이션 · ARINC 664(AFDX) 캡처·검사·송신 · 캡처 분석 · ICD — 가상 버스/네트워크로 지금 바로, 하드웨어는 드라이버(또는 패킷 캡처 라이브러리)가 있는 PC에서 같은 화면으로.**
 
-![version](https://img.shields.io/badge/version-0.4.0--beta.1-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
+![version](https://img.shields.io/badge/version-0.4.0--beta.2-7A1020) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-17181A) ![runtime](https://img.shields.io/badge/.NET-8.0%20self--contained-5F5E5A) ![ui](https://img.shields.io/badge/UI-WebView2-5F5E5A)
 
 C# 12 / .NET 8 · WPF 창 + WebView2 페이지(TypeScript) · 엔진은 [nexys-core](https://github.com/Kim-Hakseong/nexys-core) submodule
 
@@ -22,6 +22,8 @@ USB 1553 카드(단일 기능 채널 2개)를 BC로 HIL 시뮬레이터의 RT 4(
 | [**5. ANALYZE**](docs/guide/05-analyze.md) | [**6. 하드웨어 카드**](docs/guide/06-hardware.md) | [**7. 자동화·현장 측정**](docs/guide/07-automation.md) | [**8. 파일·단축키·FAQ**](docs/guide/08-reference.md) |
 | [**9. ARINC 664 (AFDX)**](docs/guide/09-arinc664.md) | | | |
 
+> **0.4.0 beta.2 — ARINC 664 상호운용**: 큐잉 포트의 큰 메시지(IP 단편화) 송신·재조립 검사, 서브 VL 라운드로빈 송신·순서 검사, VL 식별 폴백(목적지 IP 224.224.x.x · ICD UDP 포트 · UDP 포트 맵 — 표준 AFDX MAC을 쓰지 않는 프로그램용), ANALYZE › LISTEN(수신 전용), 공유 가상 네트워크로 **NexysBus 두 인스턴스 상호운용**(한 PC), INTEROP 근거 프레임 링크 · 상대 보고 CSV 가져오기 · Wireshark 프로필 내보내기(VL · SN · A/B 열, 색, 파라미터 디코드). Wireshark(tshark 4.6.9) 교차 대조 340/340, 정답지 2259/2259. 실제 NIC(Npcap) 수신 확인, Wi-Fi 어댑터는 원시 프레임 송신을 거절함을 표시.
+>
 > **0.4.0 beta.1 — ARINC 664(AFDX)**: Wireshark로 하던 664 송수신 확인을 NexysBus 안에서 — pcapng 캡처 열기/쓰기(인터페이스 = 네트워크 A/B), VL · SN · A/B · ICD 파라미터 EU 디코드, SN 무결성 · BAG · Lmax · 이중화(RM)/스큐 검사, VL 송신 시뮬레이션(BAG 스케줄러, SN 자동, A/B, 오류 주입), 상호운용 체크리스트와 `interop-report.md`. 가상 네트워크는 항상, 이더넷 포트는 Npcap(별도 설치, 동봉하지 않음)이 있는 PC에서. 정답지 코퍼스 2039/2039, 100만 프레임 열기+검사 0.3 s. 자세한 것은 [9장](docs/guide/09-arinc664.md).
 >
 > 0.3.0 beta.2: 실제 USB 1553 카드와 외부 RT로 측정을 마친 첫 버전대(응답률 100 %, 10분 연속 138,003 / 138,000 명령, 놓친 트랜잭션 0.05 %). 사이트 프로필, 채널 능력 기반 역할 배정, 장비 설정 XML 가져오기, 모드 코드를 지원합니다. 문제는 [GitHub Issues](https://github.com/Kim-Hakseong/nexys-bus/issues)로.
@@ -31,8 +33,8 @@ USB 1553 카드(단일 기능 채널 2개)를 BC로 HIL 시뮬레이터의 RT 4(
 * * *
 
 ## 설치와 실행
-- **설치형**: [Releases](https://github.com/Kim-Hakseong/nexys-bus/releases)의 `NexysBus-0.4.0-beta.1-setup.exe`. Program Files에 설치, `.nxb`/`.mon` 연결은 선택(기본 해제). WebView2 런타임이 없으면 설치 중 받는다.
-- **포터블**: `NexysBus-0.4.0-beta.1-portable.exe` 1개. 첫 실행은 `%TEMP%\.net\NexysBus\`에 풀리느라 5–12 s, 이후 약 2 s.
+- **설치형**: [Releases](https://github.com/Kim-Hakseong/nexys-bus/releases)의 `NexysBus-0.4.0-beta.2-setup.exe`. Program Files에 설치, `.nxb`/`.mon` 연결은 선택(기본 해제). WebView2 런타임이 없으면 설치 중 받는다.
+- **포터블**: `NexysBus-0.4.0-beta.2-portable.exe` 1개. 첫 실행은 `%TEMP%\.net\NexysBus\`에 풀리느라 5–12 s, 이후 약 2 s.
 - **소스**: `git clone --recurse-submodules` → `cd app/web && npm install && npm run build` → `dotnet build app/NexysBus.App/NexysBus.App.csproj -c Release` → `app\NexysBus.App\bin\Release\net8.0-windows\win-x64\NexysBus.exe`
 
 ## 화면 (왼쪽 레일)
@@ -76,7 +78,7 @@ ARINC 664 프로젝트(시작 화면 **NEW ARINC 664 PROJECT** 또는 PROJECT �
 패킷 캡처 라이브러리(Npcap)는 **배포물에 넣지 않는다** — 설치돼 있으면(`%SystemRoot%\System32\Npcap\wpcap.dll`) 실행 시 묶어서 PROJECT › DEVICE의 Ethernet ports와 NETWORK A / B 포트 선택이 켜지고, 없으면 Virtual network만 보인다(1553 `driver.json`과 같은 방식). 전용 AFDX 카드는 인터페이스 자리만 있다.
 
 ## 자동화
-`NexysBus.exe --afdx --out <dir> [--corpus <dir>]`(ARINC 664 사용자 경로 + 정답지 + 100만 프레임 + 실시간 BAG 관문), `NexysBus.exe --bus --out <dir> [--template <folder>] --forbid a,b,c`(사용자 경로 전체), `--v100rc --out <dir> [--xlsx <file>] [--template <folder>] --forbid …`(ANALYZE·ICD + UI 피드백 관문), `--hw --out <dir> …`(하드웨어 카드 G1~G7), `--site --out <dir> --profile <json>`(현장 측정, [사이트 프로필](docs/site-profile.md)), `--icdxml --dev <xml> --par <xml> --truth <csv>`(장비 설정 XML 가져오기 검증), `--v0100 --out <dir> [--truth <mon>]`, `--stress --iter 50`, `--uishots --out <dir> --prefix before|after`(피드백 10장면 캡처), `--uishots2 …`(피드백 2의 8장면), `--shot --rail SIMULATE --name x`. UI는 영문, 도움말(F1)만 한글. `Ctrl+Shift+D` 개발자 모드(ICD 푸터 DUMMY).
+`NexysBus.exe --afdx --out <dir> [--corpus <dir>] [--tshark <dir>]`(ARINC 664 사용자 경로 + 정답지 + Wireshark 대조 + 100만 프레임 + 실시간 BAG 관문; `--rtonly --rtmode sleep|hires|spin`, `--perfonly --frames N`), `--interop --transport local|nic [--nic <port>] --out <dir>`(NexysBus 두 인스턴스 송신↔수신 대조), `NexysBus.exe --bus --out <dir> [--template <folder>] --forbid a,b,c`(사용자 경로 전체), `--v100rc --out <dir> [--xlsx <file>] [--template <folder>] --forbid …`(ANALYZE·ICD + UI 피드백 관문), `--hw --out <dir> …`(하드웨어 카드 G1~G7), `--site --out <dir> --profile <json>`(현장 측정, [사이트 프로필](docs/site-profile.md)), `--icdxml --dev <xml> --par <xml> --truth <csv>`(장비 설정 XML 가져오기 검증), `--v0100 --out <dir> [--truth <mon>]`, `--stress --iter 50`, `--uishots --out <dir> --prefix before|after`(피드백 10장면 캡처), `--uishots2 …`(피드백 2의 8장면), `--shot --rail SIMULATE --name x`. UI는 영문, 도움말(F1)만 한글. `Ctrl+Shift+D` 개발자 모드(ICD 푸터 DUMMY).
 
 ## 파일
 - `.nxb` 프로젝트(JSON, 버전 1): protocol(mil1553 · arinc664) · device · bus · icd(허브 스키마 1.0, 664는 1.1 `vls`) · schedule · sources · errors · captureDir · afdx(664 설정).
@@ -85,7 +87,7 @@ ARINC 664 프로젝트(시작 화면 **NEW ARINC 664 PROJECT** 또는 PROJECT �
 
 ## 개발
 ```
-app/NexysBus.App/   Program · App · MainWindow(호스트 명령) · Services/BusEngine(프로젝트·레일·브리지 명령) · Services/SimulationService(장치 실행·라이브 캡처) · Services/AfdxService(ARINC 664: 송수신·검사·추이·상호운용, 664 프로젝트에서만 생성) · SelfTest*(--bus · --v100rc · --v0100 · --stress · --afdx)
+app/NexysBus.App/   Program · App · MainWindow(호스트 명령) · Services/BusEngine(프로젝트·레일·브리지 명령) · Services/SimulationService(장치 실행·라이브 캡처) · Services/AfdxService(ARINC 664: 송수신·검사·추이·상호운용, 664 프로젝트에서만 생성) · SelfTest*(--bus · --v100rc · --v0100 · --stress · --afdx · --interop)
 app/web/            main(레일 셸) · start · project · simulate · analyze(리스트) · icd · afdx(664 ICD·SIMULATE·ANALYZE·INTEROP) · settings · help · bus.css ; 공통은 @core(app/core/NexysView.Web)
 app/core/NexysView.Core/Protocols/   Mil1553 · Arinc664(pcapng · 프레임 · 검사 · ICD 1.1 · 가상/NIC 장치 · 송신 스케줄러)
 app/core/           nexys-core submodule (Core · Render · Host · Web)

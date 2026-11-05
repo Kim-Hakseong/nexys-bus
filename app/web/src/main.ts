@@ -27,6 +27,7 @@ const start = new StartPage(); const project = new ProjectPage(); const analyze 
 // ARINC 664 pages: built on first use by an arinc664 project
 let afdx: { icd: AfdxIcdPage; sim: AfdxSimPage; an: AfdxAnalyzePage; iop: AfdxInteropPage } | null = null;
 const A = () => afdx ??= { icd: new AfdxIcdPage(), sim: new AfdxSimPage(), an: new AfdxAnalyzePage(), iop: new AfdxInteropPage() };
+window.addEventListener('afdx-goto', async e => { await bridge.call('rail', { name: 'ANALYZE' }); await new Promise(r => setTimeout(r, 300)); await A().an.goto((e as CustomEvent).detail); });
 const is664 = () => S?.project?.protocol === 'arinc664';
 const RAILS: { id: string; label: string; icon: string; key: string }[] = [
   { id: 'PROJECT', label: 'PROJECT', icon: I.file(18), key: '1' }, { id: 'ANALYZE', label: 'ANALYZE', icon: I.table(18), key: '2' }, { id: 'SIMULATE', label: 'SIMULATE', icon: I.lineC(18), key: '3' },

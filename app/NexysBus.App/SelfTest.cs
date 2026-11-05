@@ -15,7 +15,7 @@ namespace NexysBus.App;
 public static partial class SelfTest
 {
     public static string[] Args = Array.Empty<string>();
-    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site" or "--icdxml" or "--afdx";
+    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site" or "--icdxml" or "--afdx" or "--interop" or "--interop-tx";
     static readonly List<string> Log = new();
     public static string OutDir = "";
     static readonly List<string> Gate = new();
@@ -48,6 +48,8 @@ public static partial class SelfTest
             else if (Args[0] == "--site") await Site(w);
             else if (Args[0] == "--icdxml") IcdXmlGate();
             else if (Args[0] == "--afdx") await Afdx(w);
+            else if (Args[0] == "--interop") await Interop(w);
+            else if (Args[0] == "--interop-tx") await InteropTx(w);
             else if (Args[0] == "--shot")
             {
                 // --shot --rail NAME [--click SELECTOR[;SELECTOR…]] [--wait ms] --name file: optional clicks after the rail switch (e.g. [data-a=searchHw] on PROJECT with a card)

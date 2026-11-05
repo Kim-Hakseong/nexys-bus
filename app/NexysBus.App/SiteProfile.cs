@@ -51,6 +51,12 @@ public sealed class SiteProfile
         [JsonPropertyName("peerName")] public string PeerName { get; set; } = "";
         [JsonPropertyName("jmaxMs")] public double JmaxMs { get; set; } = 0.5;
         [JsonPropertyName("skewMaxMs")] public double SkewMaxMs { get; set; } = 10;
+        /// <summary>false = no peer on the network (a loopback bench): N1 passes on any received traffic, N2 expects every own frame back.</summary>
+        [JsonPropertyName("expectPeer")] public bool ExpectPeer { get; set; } = true;
+        /// <summary>N3: long receive run (minutes, 0 = skip) — frames per minute, sequence-number losses, memory growth.</summary>
+        [JsonPropertyName("n3Minutes")] public double N3Minutes { get; set; }
+        /// <summary>N3: also send txVls during the long run (own traffic to check for losses when no peer sends).</summary>
+        [JsonPropertyName("n3Send")] public bool N3Send { get; set; }
     }
     [JsonIgnore] public string Path { get; set; } = "";
 

@@ -35,7 +35,7 @@ public sealed class AfdxService
 
     public object OpenCapture(string path)
     {
-        var sw = Stopwatch.StartNew(); Capture = AfdxCapture.Open(path); double openMs = sw.Elapsed.TotalMilliseconds;
+        var sw = Stopwatch.StartNew(); Capture = AfdxCapture.Open(path, null, S.VlRule(Icd)); double openMs = sw.Elapsed.TotalMilliseconds;
         Reanalyse(true); _e.Mode = "ANALYZE";
         _e.SetStatus($"Capture {Path.GetFileName(path)}: {Capture.Count:N0} frames, {Analysis!.Vls.Count} VLs, {Analysis.TotalErrors:N0} check findings ({openMs:F0} ms read + {Analysis.ElapsedMs:F0} ms checks)"); _e.Touch();
         return new { frames = Capture.Count, vls = Analysis.Vls.Count, errors = Analysis.TotalErrors, openMs, checkMs = Analysis.ElapsedMs };
@@ -46,6 +46,7 @@ public sealed class AfdxService
     {
         if (Capture == null) return null;
         if (!force && Analysis != null && _analysedCount == Capture.Count && _analysedVersion == Capture.Version && ReferenceEquals(_analysedIcd, Icd)) return Analysis;
+        var rule = S.VlRule(Icd); if (rule.Key != Capture.Rule.Key) Capture.Reclassify(rule);
         Analysis = new AfdxAnalysis(Capture, Icd.IsAfdx ? Icd : null, S.CheckOptions()); _analysedCount = Capture.Count; _analysedVersion = Capture.Version; _analysedIcd = Icd; _view = null; _filterKey = "";
         RebuildChannels(); return Analysis;
     }
@@ -82,7 +83,7 @@ public sealed class AfdxService
         for (int k = from; k < Math.Min(v.Length, from + Math.Clamp(count, 1, 2000)); k++)
         {
             int i = v[k]; var fl = a.Flags[i]; var port = a.PortOf(i);
-            rows.Add(new { row = k, i, t = (c.TimeNs(i) - t0) / 1e9, net = c.Network(i) == 0 ? "A" : "B", kind = c.Kind(i).ToString().ToUpperInvariant(), vl = c.Vl(i), sn = c.Vl(i) >= 0 ? c.Sn(i) : -1, len = c.WireLength(i), dst = c.Kind(i) == FrameKind.Afdx || c.Kind(i) == FrameKind.OtherIp ? $"{AfdxCapture.Ip(c.IpDst(i))}:{c.UdpDst(i)}" : "", port = port?.Name ?? "", flags = FlagText(fl), err = (fl & ~(FrameFlag.RmDuplicate | FrameFlag.NotInIcd)) != 0, dup = (fl & FrameFlag.RmDuplicate) != 0 });
+            rows.Add(new { row = k, i, no = i + 1, t = (c.TimeNs(i) - t0) / 1e9, net = c.Network(i) == 0 ? "A" : "B", kind = c.Kind(i).ToString().ToUpperInvariant(), vl = c.Vl(i), sn = c.Vl(i) >= 0 && c.HasSn(i) ? c.Sn(i) : -1, frag = c.IsFragment(i) ? $"{c.FragOffset(i)}{(c.MoreFragments(i) ? "+" : "")}" : "", from = c.VlFrom(i) == VlSource.Mac || c.Vl(i) < 0 ? "" : c.VlFrom(i).ToString().ToUpperInvariant(), len = c.WireLength(i), dst = c.Kind(i) == FrameKind.Afdx || c.Kind(i) == FrameKind.OtherIp ? $"{AfdxCapture.Ip(c.IpDst(i))}:{c.UdpDst(i)}" : "", port = port?.Name ?? "", flags = FlagText(fl), err = (fl & ~(FrameFlag.RmDuplicate | FrameFlag.NotInIcd)) != 0, dup = (fl & FrameFlag.RmDuplicate) != 0 });
         }
         return new { total = v.Length, all = c.Count, rows };
     }
@@ -90,6 +91,7 @@ public sealed class AfdxService
     {
         var l = new List<string>(); if (f.HasFlag(FrameFlag.SnGap)) l.Add("SN GAP"); if (f.HasFlag(FrameFlag.SnReversed)) l.Add("SN REV"); if (f.HasFlag(FrameFlag.SnReset)) l.Add("SN RESET");
         if (f.HasFlag(FrameFlag.BagViolation)) l.Add("BAG"); if (f.HasFlag(FrameFlag.LmaxViolation)) l.Add("LMAX"); if (f.HasFlag(FrameFlag.RmDuplicate)) l.Add("RM DUP"); if (f.HasFlag(FrameFlag.NotInIcd)) l.Add("NOT IN ICD");
+        if (f.HasFlag(FrameFlag.Reassembly)) l.Add("REASM"); if (f.HasFlag(FrameFlag.SubVlOrder)) l.Add("SUB-VL ORDER");
         return string.Join(" · ", l);
     }
 
@@ -102,7 +104,7 @@ public sealed class AfdxService
         {
             i, t = (c.TimeNs(i) - c.FirstNs) / 1e9, abs = DateTime.UnixEpoch.AddTicks(c.TimeNs(i) / 100).ToString("yyyy-MM-dd HH:mm:ss.fffffff"), net = c.Network(i) == 0 ? "A" : "B", kind = c.Kind(i).ToString().ToUpperInvariant(),
             dstMac = AfdxCapture.Mac(f, 0), srcMac = AfdxCapture.Mac(f, 6), vl = c.Vl(i), sn = c.Sn(i), wire = c.WireLength(i), captured = c.CapturedLength(i), lmax = vl?.Lmax ?? 0, bag = vl?.BagMs ?? 0,
-            ipDst = AfdxCapture.Ip(c.IpDst(i)), udpSrc = c.UdpSrc(i), udpDst = c.UdpDst(i), payload = c.Payload(i).Length, port = port?.Name ?? "", portType = port?.PortType ?? "", subVl = port?.SubVl ?? 0, vlName = vl?.Name ?? "",
+            ipDst = AfdxCapture.Ip(c.IpDst(i)), udpSrc = c.UdpSrc(i), udpDst = c.UdpDst(i), payload = c.Payload(i).Length, no = i + 1, ipId = c.IpId(i), fragment = c.IsFragment(i), fragOffset = c.FragOffset(i), moreFragments = c.MoreFragments(i), vlFrom = c.VlFrom(i).ToString().ToUpperInvariant(), hasSn = c.HasSn(i), port = port?.Name ?? "", portType = port?.PortType ?? "", subVl = port?.SubVl ?? 0, vlName = vl?.Name ?? "",
             flags = FlagText(a.Flags[i]), @params = a.Decode(i).Select(x => new { name = x.name, eu = double.IsFinite(x.eu) ? x.eu : (double?)null, unit = x.unit, hex = x.hex, channel = ChannelId(c.Vl(i), x.name) }).ToList(), hex = hex.ToString(),
         };
     }
@@ -113,7 +115,7 @@ public sealed class AfdxService
         long span = a.SpanNs; double dur = span / 1e9;
         return new
         {
-            has = true, capture = CaptureName, frames = Capture!.Count, afdx = Capture.Count - a.Arp - a.Icmp - a.OtherIp - a.Other, arp = a.Arp, icmp = a.Icmp, otherIp = a.OtherIp, other = a.Other, durationS = dur, errors = a.TotalErrors, checkMs = a.ElapsedMs,
+            has = true, capture = CaptureName, frames = Capture!.Count, afdx = Capture.Count - a.Arp - a.Icmp - a.OtherIp - a.Other, ipv4 = a.Ipv4, udp = a.Udp, tcp = a.Tcp, rule = Capture.Rule.IsDefault ? "MAC" : "MAC + " + string.Join(" + ", new[] { Capture.Rule.IpFallback ? "IP 224.224.x.x" : "", Capture.Rule.UdpPorts.Count + Capture.Rule.UdpEndpoints.Count > 0 ? "UDP map" : "" }.Where(x => x.Length > 0)), arp = a.Arp, icmp = a.Icmp, otherIp = a.OtherIp, other = a.Other, durationS = dur, errors = a.TotalErrors, checkMs = a.ElapsedMs,
             bandwidthBps = a.Vls.Values.Sum(v => v.BandwidthBps(span)), expectedBps = a.Vls.Values.Where(v => v.InIcd).Sum(v => v.ExpectedBps * (v.Network == "AB" ? 1 : 1)),
             vls = a.Vls.Values.OrderBy(v => v.Vl).Select(v => VlRow(v, span)).ToList(),
             notInCapture = (Icd.Vls ?? new()).Where(x => !a.Vls.ContainsKey(x.VlId)).Select(x => x.VlId).ToList(),
@@ -126,6 +128,8 @@ public sealed class AfdxService
         missingA = v.Missing[0], missingB = v.Missing[1], skewMeanUs = v.SkewMeanUs, skewMaxUs = v.SkewMaxUs, pairs = v.Pairs, skewViol = v.SkewViolations,
         meanMsA = v.MeanIntervalMs(0), meanMsB = v.MeanIntervalMs(1), minMsA = v.Intervals[0] > 0 ? v.IntervalMinMs[0] : 0, minMsB = v.Intervals[1] > 0 ? v.IntervalMinMs[1] : 0, jitterMsA = v.JitterMs(0), jitterMsB = v.JitterMs(1),
         maxWire = v.MaxWire, bandwidthBps = v.BandwidthBps(span), expectedBps = v.ExpectedBps, errors = v.Errors,
+        fragments = v.Fragments, messages = v.Messages, msgComplete = v.MsgComplete, msgIncomplete = v.MsgIncomplete, msgReordered = v.MsgReordered, msgTruncated = v.MsgTruncated, subVlBreaks = v.SubVlBreaks, byIp = v.ByIp, byUdp = v.ByUdp,
+        subVls = v.SubVls.Values.Select(x => new { sub = x.SubVl, frames = x.Frames, meanMs = x.MeanIntervalMs, maxMs = x.IntMaxMs, meanBags = v.BagMs > 0 ? x.MeanIntervalMs / v.BagMs : 0 }).ToList(),
     };
 
     // ------------------------------------------------------------------ trend channels: one DataFile per analysed capture, a channel per ICD parameter
@@ -179,29 +183,36 @@ public sealed class AfdxService
     INetworkDevice MakeDevice(bool manual)
     {
         if (P.Device == "virtual") return new VirtualNetworkDevice { ManualClock = manual, Faults = S.Faults };
+        if (P.Device == "local") { if (manual) throw new InvalidOperationException("batch mode runs on the virtual network only"); return new LocalNetworkDevice { ReceiveOwn = false }; }   // like a port: own transmissions are not received back
         if (manual) throw new InvalidOperationException("batch mode runs on the virtual network only");
         var roles = NetworkRoles.Assign(Pcap.Ports(), S.NicA, S.NicB); foreach (var n in roles.Notes) Diag.Trace("network roles: " + n);
         if (roles.NicA == null && roles.NicB == null) throw new InvalidOperationException("no network port selected (PROJECT › NETWORK A / B)" + (Pcap.Available ? "" : " — packet-capture library not installed"));
         return new PcapNetworkDevice(roles.NicA, roles.NicB);
     }
 
-    public void Start()
+    /// <summary>true while the run only receives (ANALYZE › LISTEN: nothing is sent, the capture fills live).</summary>
+    public bool Listening { get; private set; }
+    public void Start(bool listenOnly = false)
     {
         if (Running) return; LastError = "";
         try
         {
-            if (Vls.Count == 0) { _e.SetStatus("Nothing to send: load an ARINC 664 ICD (ICD rail) first"); return; }
+            if (Vls.Count == 0 && !listenOnly) { _e.SetStatus("Nothing to send: load an ARINC 664 ICD (ICD rail) first"); return; }
             Stop();
-            _dev = MakeDevice(false); _dev.Open(); _dev.Start();
-            _tx = new AfdxSender(_dev, Vls, S.SourcesById(), S.Disabled.ToHashSet()) { Errors = S.Errors, Equipment = (ushort)S.Equipment };
-            Capture = new AfdxCapture(1 << 22) { Path = "" }; Analysis = null; _analysedCount = -1; _view = null;
+            _dev = MakeDevice(false); _dev.Open(); _dev.Start(); Listening = listenOnly;
+            _tx = new AfdxSender(_dev, Vls, S.SourcesById(), listenOnly ? Vls.Select(v => v.VlId).ToHashSet() : S.Disabled.ToHashSet()) { Errors = S.Errors, Equipment = (ushort)S.Equipment };
+            Capture = new AfdxCapture(1 << 22, S.VlRule(Icd)) { Path = "" }; Analysis = null; _analysedCount = -1; _view = null;
             _tx.Start(); _sw = Stopwatch.StartNew();
             _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(100) }; _timer.Tick += (_, _) => Pump(); _timer.Start();
-            _e.SetLed("busy"); _e.SetStatus($"Sending {_tx.Vls.Count(v => v.Enabled)} VLs on {_dev.Name}"); _e.Touch();
+            _e.SetLed("busy"); _e.SetStatus(listenOnly ? $"Listening on {_dev.Name}" : $"Sending {_tx.Vls.Count(v => v.Enabled)} VLs on {_dev.Name}"); _e.Touch();
         }
         catch (Exception ex) { LastError = ex.Message; Diag.Trace("afdx start failed " + ex); _e.SetStatus("Start failed: " + ex.Message); _e.SetLed("error"); _tx?.Dispose(); _dev?.Dispose(); _tx = null; _dev = null; }
     }
-    void Pump() { if (_dev == null || Capture == null) return; var cap = Capture; _dev.Poll((n, t, f) => cap.Add(n, t, f)); if (_tx?.LastError.Length > 0) { LastError = _tx.LastError; _e.SetStatus("Sender stopped: " + LastError); _e.SetLed("error"); } }
+    void Pump()
+    {
+        if (_dev == null || Capture == null) return; var cap = Capture; _dev.Poll((n, t, f) => cap.Add(n, t, f));
+        if (_dev is PcapNetworkDevice pd && pd.LastSendError.Length > 0 && LastError.Length == 0) { LastError = "the port refused to send (" + pd.Counters.SendErrors + " frames): " + pd.LastSendError; _e.SetStatus(LastError); } if (_tx?.LastError.Length > 0) { LastError = _tx.LastError; _e.SetStatus("Sender stopped: " + LastError); _e.SetLed("error"); }
+    }
 
     public void Stop()
     {
@@ -224,7 +235,7 @@ public sealed class AfdxService
         Stop(); var sw = Stopwatch.StartNew();
         var dev = new VirtualNetworkDevice { ManualClock = true, Faults = S.Faults }; dev.Open(); dev.Start();
         var tx = new AfdxSender(dev, Vls, S.SourcesById(), S.Disabled.ToHashSet()) { Errors = S.Errors, Equipment = (ushort)S.Equipment };
-        var cap = new AfdxCapture(1 << 22); tx.RunBatch(dev, seconds, (n, t, f) => cap.Add(n, t, f));
+        var cap = new AfdxCapture(1 << 22, S.VlRule(Icd)); tx.RunBatch(dev, seconds, (n, t, f) => cap.Add(n, t, f));
         Directory.CreateDirectory(CaptureDir); var path = Path.Combine(CaptureDir, $"{San(P.Name)}_{DateTime.Now:yyyyMMdd_HHmmss}_batch.pcapng"); cap.Save(path); LastCapturePath = path;
         Capture = cap; _lastTx = tx; Reanalyse(true);
         _e.SetStatus($"Batch {seconds:G} s: {tx.Vls.Sum(v => v.Sent[0] + v.Sent[1]):N0} frames sent, {cap.Count:N0} received, {Analysis!.TotalErrors:N0} check findings → {Path.GetFileName(path)}"); _e.Touch();
@@ -236,10 +247,10 @@ public sealed class AfdxService
         var tx = _tx ?? _lastTx; var dev = _dev;
         return new
         {
-            running = Running, elapsedS = ElapsedS, device = P.Device == "virtual" ? "Virtual network (A/B loopback)" : $"Ethernet A {S.NicA} / B {S.NicB}", error = LastError, lastCapture = LastCapturePath, captureDir = CaptureDir,
-            sent = tx?.Vls.Sum(v => v.Sent[0] + v.Sent[1]) ?? 0, sentA = tx?.Vls.Sum(v => v.Sent[0]) ?? 0, sentB = tx?.Vls.Sum(v => v.Sent[1]) ?? 0, received = dev?.Counters.Received ?? Capture?.Count ?? 0,
+            running = Running, listening = Running && Listening, elapsedS = ElapsedS, device = P.Device == "virtual" ? "Virtual network (A/B loopback)" : P.Device == "local" ? "Shared virtual network (this PC, other NexysBus instances)" : $"Ethernet A {S.NicA} / B {S.NicB}", error = LastError, lastCapture = LastCapturePath, captureDir = CaptureDir,
+            sent = tx?.Vls.Sum(v => v.Sent[0] + v.Sent[1]) ?? 0, sentA = tx?.Vls.Sum(v => v.Sent[0]) ?? 0, sentB = tx?.Vls.Sum(v => v.Sent[1]) ?? 0, sendErrors = tx?.Vls.Sum(v => v.Attempted[0] + v.Attempted[1] - v.Sent[0] - v.Sent[1]) ?? 0, received = dev?.Counters.Received ?? Capture?.Count ?? 0,
             expectedBps = Vls.Where(v => !S.Disabled.Contains(v.VlId)).Sum(v => (v.Lmax + 20) * 8.0 / (v.BagMs / 1000) * (v.Network == "AB" ? 2 : 1)),
-            vls = tx?.Vls.Select(v => new { vl = v.Vl.VlId, enabled = v.Enabled, frames = v.Frames, sentA = v.Sent[0], sentB = v.Sent[1], bagMs = v.Vl.BagMs, meanMs = v.IntMeanMs, minMs = v.IntN > 0 ? v.IntMinMs : 0, maxMs = v.IntMaxMs, lateMeanUs = v.LateMeanUs, lateStdUs = v.LateStdUs, lateMaxUs = v.LateMaxUs, slips = v.Slips }).ToList(),
+            vls = tx?.Vls.Select(v => new { vl = v.Vl.VlId, enabled = v.Enabled, frames = v.Frames, sentA = v.Sent[0], sentB = v.Sent[1], firstSnA = v.FirstSn[0], lastSnA = v.LastSn[0], firstSnB = v.FirstSn[1], lastSnB = v.LastSn[1], attemptedA = v.Attempted[0], attemptedB = v.Attempted[1], messages = v.Messages, fragMessages = v.FragMessages, bagMs = v.Vl.BagMs, meanMs = v.IntMeanMs, minMs = v.IntN > 0 ? v.IntMinMs : 0, maxMs = v.IntMaxMs, lateMeanUs = v.LateMeanUs, lateStdUs = v.LateStdUs, lateMaxUs = v.LateMaxUs, slips = v.Slips }).ToList(),
         };
     }
 
@@ -268,7 +279,7 @@ public sealed class AfdxService
         var pt = Vls.FirstOrDefault(q => q.VlId == vl)?.Ports.FirstOrDefault(p => p.Name == port); if (pt == null) return;
         if (idx < 0)
         {
-            switch (field) { case "name": pt.Name = v.GetString() ?? pt.Name; break; case "size": pt.Size = Math.Clamp(Num(v), 1, 1471); break; case "sub_vl": pt.SubVl = Math.Clamp(Num(v), 1, 4); break; case "port_type": pt.PortType = v.GetString() == "queuing" ? "queuing" : "sampling"; break; case "udp_dst": pt.UdpDst = Math.Clamp(Num(v), 0, 65535); break; case "udp_src": pt.UdpSrc = Math.Clamp(Num(v), 0, 65535); break; case "ip_dst": pt.IpDst = v.GetString() ?? pt.IpDst; break; case "ip_src": pt.IpSrc = v.GetString() ?? pt.IpSrc; break; }
+            switch (field) { case "name": pt.Name = v.GetString() ?? pt.Name; break; case "size": pt.Size = Math.Clamp(Num(v), 1, pt.PortType == "queuing" ? AfdxIcd.MaxQueuingMessage : 1471); break; case "sub_vl": pt.SubVl = Math.Clamp(Num(v), 1, 4); break; case "port_type": pt.PortType = v.GetString() == "queuing" ? "queuing" : "sampling"; break; case "udp_dst": pt.UdpDst = Math.Clamp(Num(v), 0, 65535); break; case "udp_src": pt.UdpSrc = Math.Clamp(Num(v), 0, 65535); break; case "ip_dst": pt.IpDst = v.GetString() ?? pt.IpDst; break; case "ip_src": pt.IpSrc = v.GetString() ?? pt.IpSrc; break; }
         }
         else if (idx < pt.Params.Count)
         {
@@ -304,9 +315,47 @@ public sealed class AfdxService
             case "err.snSkip": s.Errors.SnSkipEvery = N(); break; case "err.dropA": s.Errors.DropAEvery = N(); break; case "err.dropB": s.Errors.DropBEvery = N(); break; case "err.oversize": s.Errors.OversizeEvery = N(); break; case "err.early": s.Errors.EarlyEvery = N(); break;
             case "net.delayUs": s.Faults.DelayUs = Math.Max(0, D()); break; case "net.jitterUs": s.Faults.JitterUs = Math.Max(0, D()); break; case "net.lossEvery": s.Faults.LossEvery = N(); break; case "net.dupEvery": s.Faults.DupEvery = N(); break; case "net.skewBUs": s.Faults.SkewBUs = Math.Max(0, D()); break;
             case "peerName": s.PeerName = v.GetString() ?? ""; break;
+            case "err.fragDrop": s.Errors.FragDropEvery = N(); break;
+            case "vlFromIp": s.VlFromIp = v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.String && v.GetString() == "true"; break;
+            case "vlFromIcd": s.VlFromIcd = v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.String && v.GetString() == "true"; break;
+            case "udpSn": s.UdpSn = v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.String && v.GetString() == "true"; break;
+            case "udpVls": s.UdpVls = ParseUdpMap(v.GetString() ?? ""); break;
         }
         _analysedIcd = null; Changed();
     }
+    /// <summary>"5000=900, 5001=901" (UDP destination port = VL id) → mapping list; malformed parts are ignored.</summary>
+    public static List<AfdxProjectSettings.UdpVlMap> ParseUdpMap(string text)
+    {
+        var l = new List<AfdxProjectSettings.UdpVlMap>();
+        foreach (var part in text.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split(new[] { '=', ':', '>' }, StringSplitOptions.RemoveEmptyEntries);
+            if (kv.Length == 2 && int.TryParse(kv[0], out int port) && int.TryParse(kv[1], out int vl) && port is > 0 and <= 65535 && vl is >= 0 and <= 65535) l.Add(new() { UdpDst = port, Vl = vl });
+        }
+        return l;
+    }
+    static string UdpMapText(List<AfdxProjectSettings.UdpVlMap> l) => string.Join(", ", l.Select(m => $"{m.UdpDst}={m.Vl}"));
+
+    /// <summary>Peer report from a CSV (one row per VL): columns vl | vl_id, rx_a | frames_a | received_a, rx_b | frames_b | received_b,
+    /// errors, note (header names matched case-insensitively). Returns the rows taken.</summary>
+    public int ImportPeerCsv(string path)
+    {
+        var rows = File.ReadAllLines(path).Where(l => l.Trim().Length > 0).Select(l => l.Split(new[] { ',', ';', '\t' })).ToList(); if (rows.Count < 2) return 0;
+        var h = rows[0].Select(x => x.Trim().Trim('"').ToLowerInvariant().Replace(" ", "_")).ToList();
+        int Col(params string[] names) { foreach (var n in names) { int k = h.IndexOf(n); if (k >= 0) return k; } return -1; }
+        int cVl = Col("vl", "vl_id", "vlid"), cA = Col("rx_a", "rxa", "frames_a", "received_a"), cB = Col("rx_b", "rxb", "frames_b", "received_b"), cE = Col("errors", "error", "errors_seen"), cN = Col("note", "notes", "remark");
+        if (cVl < 0) throw new InvalidDataException("peer CSV: no 'vl' column (header: " + string.Join(",", h) + ")");
+        int n = 0;
+        foreach (var r in rows.Skip(1))
+        {
+            string F(int c) => c >= 0 && c < r.Length ? r[c].Trim().Trim('"') : ""; if (!int.TryParse(F(cVl), out int vl)) continue;
+            var k = vl.ToString(CultureInfo.InvariantCulture); if (!S.Peer.TryGetValue(k, out var pr)) S.Peer[k] = pr = new AfdxProjectSettings.PeerReport();
+            long? L(int c) => long.TryParse(F(c), out long x) ? x : null;
+            if (cA >= 0) pr.RxA = L(cA); if (cB >= 0) pr.RxB = L(cB); if (cE >= 0) pr.Errors = L(cE); if (cN >= 0) pr.Note = F(cN); n++;
+        }
+        Changed(); _e.SetStatus($"Peer report: {n} VLs from {Path.GetFileName(path)}"); return n;
+    }
+
     public void SetPeer(int vl, string field, JsonElement v)
     {
         var k = vl.ToString(CultureInfo.InvariantCulture); if (!S.Peer.TryGetValue(k, out var r)) S.Peer[k] = r = new AfdxProjectSettings.PeerReport();
@@ -334,17 +383,23 @@ public sealed class AfdxService
             o.Add(new("vl_unknown", "No VL outside the ICD", extra.Count == 0 ? "PASS" : "FAIL", extra.Count == 0 ? "0" : $"{extra.Count}: VL {V(extra)}"));
         }
         long gaps = seen.Sum(v => v.SnGaps[0] + v.SnGaps[1]), rev = seen.Sum(v => v.SnReversed[0] + v.SnReversed[1]);
-        o.Add(new("sn", "Sequence numbers continuous (integrity)", gaps + rev == 0 ? "PASS" : "FAIL", $"gaps {gaps} (VL {V(seen.Where(v => v.SnGaps[0] + v.SnGaps[1] > 0).Select(v => v.Vl))}) · reversed/duplicate {rev}" + (seen.Sum(v => v.SnResets[0] + v.SnResets[1]) > 0 ? $" · resets {seen.Sum(v => v.SnResets[0] + v.SnResets[1])}" : "")));
+        o.Add(new("sn", "Sequence numbers continuous (integrity)", gaps + rev == 0 ? "PASS" : "FAIL", $"gaps {gaps} (VL {V(seen.Where(v => v.SnGaps[0] + v.SnGaps[1] > 0).Select(v => v.Vl))}) · reversed/duplicate {rev}" + (seen.Sum(v => v.SnResets[0] + v.SnResets[1]) > 0 ? $" · resets {seen.Sum(v => v.SnResets[0] + v.SnResets[1])}" : ""), gaps + rev == 0 ? 0 : FirstFlag(FrameFlag.SnGap | FrameFlag.SnReversed)));
         long bag = seen.Sum(v => v.BagViolations[0] + v.BagViolations[1]);
-        o.Add(new("bag", $"Frame spacing ≥ BAG − Jmax ({S.JmaxMs:G} ms)", bag == 0 ? "PASS" : "FAIL", $"{bag} intervals short (VL {V(seen.Where(v => v.BagViolations[0] + v.BagViolations[1] > 0).Select(v => v.Vl))})"));
+        o.Add(new("bag", $"Frame spacing ≥ BAG − Jmax ({S.JmaxMs:G} ms)", bag == 0 ? "PASS" : "FAIL", $"{bag} intervals short (VL {V(seen.Where(v => v.BagViolations[0] + v.BagViolations[1] > 0).Select(v => v.Vl))})", bag == 0 ? 0 : FirstFlag(FrameFlag.BagViolation)));
         long lmax = seen.Sum(v => v.LmaxViolations);
-        o.Add(icdVls.Count == 0 ? new("lmax", "Frames ≤ Lmax", "N/A", "needs the ICD") : new("lmax", "Frames ≤ Lmax", lmax == 0 ? "PASS" : "FAIL", $"{lmax} frames longer (VL {V(seen.Where(v => v.LmaxViolations > 0).Select(v => v.Vl))})"));
+        o.Add(icdVls.Count == 0 ? new("lmax", "Frames ≤ Lmax", "N/A", "needs the ICD") : new("lmax", "Frames ≤ Lmax", lmax == 0 ? "PASS" : "FAIL", $"{lmax} frames longer (VL {V(seen.Where(v => v.LmaxViolations > 0).Select(v => v.Vl))})", lmax == 0 ? 0 : FirstFlag(FrameFlag.LmaxViolation)));
         var red = seen.Where(v => v.Network == "AB").ToList(); long miss = red.Sum(v => v.Missing[0] + v.Missing[1]);
         o.Add(red.Count == 0 ? new("ab", "Redundant VLs arrive on A and B", "N/A", "no redundant VL") : new("ab", "Redundant VLs arrive on A and B", miss == 0 ? "PASS" : "FAIL", $"{red.Count} redundant VLs · missing A {red.Sum(v => v.Missing[0])} · missing B {red.Sum(v => v.Missing[1])}"));
         var single = seen.Where(v => v.InIcd && v.Network != "AB" && v.Frames[v.Network == "A" ? 1 : 0] > 0).Select(v => v.Vl).ToList();
         if (single.Count > 0) o.Add(new("net", "Single-network VLs only on their network", "FAIL", $"VL {V(single)}"));
         double skMax = red.Count == 0 ? 0 : red.Max(v => v.SkewMaxUs); long skV = red.Sum(v => v.SkewViolations);
         o.Add(red.Count == 0 ? new("skew", $"A/B skew ≤ {S.SkewMaxMs:G} ms", "N/A", "no redundant VL") : new("skew", $"A/B skew ≤ {S.SkewMaxMs:G} ms", skV == 0 ? "PASS" : "FAIL", $"max {skMax / 1000:F3} ms · mean {(red.Sum(v => v.Pairs) > 0 ? red.Sum(v => v.SkewSumUs) / red.Sum(v => v.Pairs) / 1000 : 0):F3} ms · over the limit {skV}"));
+        var frag = seen.Where(v => v.Fragments > 0).ToList(); long inc = frag.Sum(v => v.MsgIncomplete), reo = frag.Sum(v => v.MsgReordered);
+        o.Add(frag.Count == 0 ? new("reassembly", "Fragmented messages reassemble (queuing ports)", "N/A", "no IP-fragmented message")
+            : new("reassembly", "Fragmented messages reassemble (queuing ports)", inc + reo == 0 ? "PASS" : "FAIL", $"{frag.Sum(v => v.MsgComplete)} complete · {inc} incomplete · {reo} out of order · {frag.Sum(v => v.Fragments)} fragments on VL {V(frag.Select(v => v.Vl))}" + (frag.Sum(v => v.MsgTruncated) > 0 ? $" · {frag.Sum(v => v.MsgTruncated)} cut by the capture start/end" : ""), inc + reo == 0 ? 0 : FirstFlag(FrameFlag.Reassembly)));
+        var multi = seen.Where(v => v.SubVls.Count > 1).ToList(); long brk = multi.Sum(v => v.SubVlBreaks);
+        o.Add(multi.Count == 0 ? new("subvl", "Sub-VLs served in round-robin order", "N/A", "no VL with more than one sub-VL in the ICD")
+            : new("subvl", "Sub-VLs served in round-robin order", brk == 0 ? "PASS" : "FAIL", $"{multi.Count} VLs with sub-VLs · order breaks {brk}" + (brk > 0 ? $" (VL {V(multi.Where(v => v.SubVlBreaks > 0).Select(v => v.Vl))})" : ""), brk == 0 ? 0 : FirstFlag(FrameFlag.SubVlOrder)));
         int nan = 0, dec = 0; foreach (int i in a.Accepted.Take(20000)) foreach (var d in a.Decode(i)) { dec++; if (!double.IsFinite(d.eu)) nan++; }
         o.Add(icdVls.Count == 0 ? new("decode", "Parameters decode", "N/A", "needs the ICD") : new("decode", "Parameters decode (finite values)", dec > 0 && nan == 0 ? "PASS" : dec == 0 ? "FAIL" : "FAIL", $"{dec - nan} / {dec} values of the first 20,000 accepted frames"));
         var slow = seen.Where(v => v.BagMs > 0 && v.Intervals[0] + v.Intervals[1] > 0 && Math.Max(v.MeanIntervalMs(0), v.MeanIntervalMs(1)) > v.BagMs * 1.5 + S.JmaxMs).Select(v => v.Vl).ToList();
@@ -352,7 +407,9 @@ public sealed class AfdxService
         o.Add(new("other", "Other traffic on the networks", "INFO", $"ARP {a.Arp} · ICMP {a.Icmp} · other IP {a.OtherIp} · other {a.Other}"));
         return o;
     }
-    public sealed record InteropItem(string Id, string Check, string Verdict, string Detail);
+    /// <summary>One checklist row; <paramref name="Frame"/> = capture frame number (1-based, as Wireshark's No.) of the first frame behind a FAIL, 0 = none.</summary>
+    public sealed record InteropItem(string Id, string Check, string Verdict, string Detail, int Frame = 0);
+    int FirstFlag(FrameFlag f) { var a = Analysis; if (a == null) return 0; for (int i = 0; i < a.Flags.Length; i++) if ((a.Flags[i] & f) != 0) return i + 1; return 0; }
 
     /// <summary>NexysBus → peer: what we sent per VL (last run) against what the peer reported.</summary>
     public sealed record TxRow(int Vl, string Name, string Network, double BagMs, bool Enabled, long SentA, long SentB, double BagMeasMs, double JitterUs, long? RxA, long? RxB, long? Errors, string Note, string Verdict);
@@ -379,8 +436,8 @@ public sealed class AfdxService
         sb.Append($"# Interoperability report — {P.Name}\n\n");
         sb.Append($"- Date: {DateTime.Now:yyyy-MM-dd HH:mm}\n- Tool: {AppInfo.Name} {AppInfo.VersionText}\n- Peer: {(S.PeerName.Length > 0 ? S.PeerName : "(not named)")}\n- ICD: {Icd.Source ?? "(none)"} · {(Icd.Vls ?? new()).Count} VLs (hub schema {Icd.Schema ?? "1.0"})\n");
         sb.Append($"- Capture: {(Capture?.Path.Length > 0 ? Capture.Path : CaptureName)} · {Capture?.Count ?? 0:N0} frames · {(a != null ? a.SpanNs / 1e9 : 0):F2} s\n- Check settings: Jmax {S.JmaxMs.ToString(ic)} ms · skew limit {S.SkewMaxMs.ToString(ic)} ms · pair window {S.PairWindowMs.ToString(ic)} ms\n\n");
-        sb.Append("## 1. Peer → NexysBus (automatic)\n\n| # | Check | Verdict | Detail |\n|---|---|---|---|\n");
-        int k = 1; foreach (var c in checks) sb.Append($"| {k++} | {c.Check} | **{c.Verdict}** | {c.Detail.Replace("|", "/")} |\n");
+        sb.Append("## 1. Peer → NexysBus (automatic)\n\n| # | Check | Verdict | Detail | Evidence |\n|---|---|---|---|---|\n");
+        int k = 1; foreach (var c in checks) sb.Append($"| {k++} | {c.Check} | **{c.Verdict}** | {c.Detail.Replace("|", "/")} | {(c.Frame > 0 ? $"[frame {c.Frame}](#frame-{c.Frame}) — Wireshark `frame.number == {c.Frame}`" : "")} |\n");
         sb.Append($"\nResult: {checks.Count(c => c.Verdict == "PASS")} PASS · {checks.Count(c => c.Verdict == "FAIL")} FAIL · {checks.Count(c => c.Verdict is "N/A" or "INFO")} N/A or INFO.\n\n");
         if (a != null)
         {
@@ -390,6 +447,12 @@ public sealed class AfdxService
         }
         sb.Append("## 2. NexysBus → peer (reported by the peer)\n\n| VL | Name | Net | BAG ms | Sent A | Sent B | Measured interval ms | Peer rx A | Peer rx B | Peer errors | Verdict | Note |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n");
         foreach (var r in TxTable()) sb.Append(FormattableString.Invariant($"| {r.Vl} | {r.Name} | {r.Network} | {r.BagMs:G} | {r.SentA} | {r.SentB} | {r.BagMeasMs:F3} | {r.RxA} | {r.RxB} | {r.Errors} | {r.Verdict} | {r.Note.Replace("|", "/")} |\n"));
+        var ev = checks.Where(c => c.Frame > 0).ToList();
+        if (ev.Count > 0 && Capture != null)
+        {
+            sb.Append("\n### Evidence frames\n\n");
+            foreach (var c in ev) { int i = c.Frame - 1; sb.Append(FormattableString.Invariant($"<a id=\"frame-{c.Frame}\"></a>- **frame {c.Frame}** ({c.Id}): t = {(Capture.TimeNs(i) - Capture.FirstNs) / 1e9:F6} s · network {(Capture.Network(i) == 0 ? "A" : "B")} · VL {Capture.Vl(i)} · SN {Capture.Sn(i)} · {Capture.WireLength(i)} B · {FlagText(a!.Flags[i])}\n")); }
+        }
         sb.Append("\n## 3. Open items (UNVERIFIED until measured with the peer)\n\n- IP address plan (multicast 224.224.x.x destination, unicast sources) and UDP port ranges of the peer\n- Queuing-port fragmentation / reassembly of messages larger than one frame\n- Sub-VL transmit order inside one VL\n- The peer's skew limit and integrity-checking mode\n- Source-MAC interface id (A = 1, B = 2) set by the peer's end system\n");
         return sb.ToString();
     }
@@ -403,7 +466,7 @@ public sealed class AfdxService
         {
             icd = new { source = Icd.Source ?? "", vls = Vls.Count, ports = Vls.Sum(v => v.Ports.Count), @params = Vls.Sum(v => v.Ports.Sum(p => p.Params.Count)), errors = AfdxIcd.Validate(Icd).Count(x => x.StartsWith("error")), warnings = AfdxIcd.Validate(Icd).Count(x => x.StartsWith("warning")) },
             vlList = Vls.Select(v => new { vl = v.VlId, name = v.Name, bagMs = v.BagMs, lmax = v.Lmax, network = v.Network, ports = v.Ports.Count, subVls = v.SubVls, @params = v.Ports.Sum(p => p.Params.Count), enabled = !S.Disabled.Contains(v.VlId), expectedBps = (v.Lmax + 20) * 8.0 / (v.BagMs / 1000), source = Src0(v.VlId) }).ToList(),
-            settings = new { nicA = S.NicA, nicB = S.NicB, jmaxMs = S.JmaxMs, skewMaxMs = S.SkewMaxMs, pairWindowMs = S.PairWindowMs, errors = S.Errors, faults = S.Faults, peerName = S.PeerName },
+            settings = new { nicA = S.NicA, nicB = S.NicB, jmaxMs = S.JmaxMs, skewMaxMs = S.SkewMaxMs, pairWindowMs = S.PairWindowMs, errors = S.Errors, faults = S.Faults, peerName = S.PeerName, vlFromIp = S.VlFromIp, vlFromIcd = S.VlFromIcd, udpSn = S.UdpSn, udpVls = UdpMapText(S.UdpVls) },
             run = RunDto(),
             capture = new { name = CaptureName, path = Capture?.Path ?? "", frames = Capture?.Count ?? 0, vls = a?.Vls.Count ?? 0, findings = a?.TotalErrors ?? 0 },
             npcap = Pcap.Available,
@@ -435,11 +498,14 @@ public sealed class AfdxService
             case "afdx.peer.set": SetPeer(Bridge.I(r, "vl"), Bridge.S(r, "field"), r.GetProperty("value")); return true;
             case "afdx.ports": result = Ports(); return true;
             case "afdx.start": Start(); return true;
+            case "afdx.listen": Start(listenOnly: true); return true;
             case "afdx.stop": Stop(); return true;
             case "afdx.runFor": result = RunFor(Bridge.D(r, "seconds", 10)); return true;
             case "afdx.status": result = RunDto(); return true;
             case "afdx.interop": result = new { checks = PeerChecks(), tx = TxTable(), peerName = S.PeerName, capture = CaptureName }; return true;
             case "afdx.interop.exportTo": result = ExportReport(Bridge.S(r, "path")); return true;
+            case "afdx.peer.importCsvPath": result = ImportPeerCsv(Bridge.S(r, "path")); return true;
+            case "afdx.wireshark.exportTo": result = WiresharkProfile.Write(Bridge.S(r, "dir"), Icd, AppInfo.Name + " " + AppInfo.VersionText); _e.SetStatus("Wireshark profile → " + result); return true;
             case "afdx.reanalyse": Reanalyse(true); _e.Touch(); result = Stats(); return true;
         }
         return false;

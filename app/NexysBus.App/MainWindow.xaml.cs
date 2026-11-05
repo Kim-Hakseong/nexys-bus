@@ -125,6 +125,17 @@ public partial class MainWindow : Window
                     var dlg = new SaveFileDialog { Title = "Interoperability report", Filter = "Markdown|*.md", FileName = "interop-report.md" };
                     if (dlg.ShowDialog(this) != true) return null; return Engine.Afdx.ExportReport(dlg.FileName);
                 }
+            case "afdx.peer.importCsv":
+                {
+                    var dlg = new OpenFileDialog { Title = "Peer report (CSV: vl, rx_a, rx_b, errors, note)", Filter = "CSV|*.csv;*.txt|All|*.*" };
+                    if (dlg.ShowDialog(this) != true) return null; return Engine.Afdx.ImportPeerCsv(dlg.FileName);
+                }
+            case "afdx.wireshark.export":
+                {
+                    var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Folder for the Wireshark profile (plugins + profiles)" };
+                    if (dlg.ShowDialog(this) != true) return null; var dir = Path.Combine(dlg.FolderName, "NexysBus-Wireshark");
+                    NexysBus.App.Services.WiresharkProfile.Write(dir, Engine.Project.Icd, AppInfo.Name + " " + AppInfo.VersionText); Engine.SetStatus("Wireshark profile → " + dir); return dir;
+                }
             case "afdx.icd.exportCsv":
                 {
                     var dlg = new SaveFileDialog { Title = "ARINC 664 ICD (CSV)", Filter = "CSV|*.csv", FileName = Engine.Project.Name.Replace(' ', '_') + "_afdx_icd.csv" };
