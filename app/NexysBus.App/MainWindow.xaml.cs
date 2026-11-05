@@ -1,8 +1,6 @@
 using System.IO;
 using System.Text.Json;
 using System.Windows;
-using System.Windows.Media.Imaging;
-using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using NexysBus.App.Services;
 
@@ -23,9 +21,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = $"{_brand.displayName} {AppInfo.VersionText}";
-        try { Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/brand/AppIcon.ico"), BitmapCreateOptions.None, BitmapCacheOption.OnLoad); } catch { }
-        SourceInitialized += (_, _) => AppId.ApplyWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle, _brand.displayName);
+        AppShell.Decorate(this, _brand.displayName);
         Loaded += async (_, _) => await InitAsync();
         Closing += (_, _) => { Engine.StopAll(); BusStore.Save(this); };
         Engine.Changed += () => { if (Bridge?.PageReady == true) Dispatcher.BeginInvoke(() => BusStore.Save(this), System.Windows.Threading.DispatcherPriority.ApplicationIdle); };
@@ -35,29 +31,10 @@ public partial class MainWindow : Window
     {
         try
         {
-            string? rt = WebShell.ProbeRuntime(); string? fixedDir = null;
-            if (rt == null)
-            {
-                string d = Path.Combine(AppContext.BaseDirectory, "WebView2Runtime");
-                if (Directory.Exists(d)) fixedDir = d; else throw new InvalidOperationException("Microsoft Edge WebView2 Runtime is not installed");
-            }
-            var env = await WebShell.CreateEnvironmentAsync(fixedDir, WebShell.UserDataFolder(SelfTest.Enabled ? "WebView2-auto" : Program.Fresh ? "WebView2-fresh" : "WebView2"));
-            RuntimeVersion = env.BrowserVersionString;
-            Web.DefaultBackgroundColor = System.Drawing.ColorTranslator.FromHtml("#ECEAE5");
-            await Web.EnsureCoreWebView2Async(env);
-            var core = Web.CoreWebView2;
-            if (!Directory.Exists(WebShell.WwwRoot)) { Boot.Text = "wwwroot missing — run `npm run build` in bus/web and rebuild"; Diag.Trace("wwwroot missing: " + WebShell.WwwRoot); }
-            WebShell.ConfigureCore(core);
-            Bridge = new Bridge(core, env, Engine, Dispatcher, HostCommand, Engine.Dispatch);
-            Bridge.Ready += () => { Diag.Trace("page ready"); Dispatcher.BeginInvoke(() => { BusStore.Load(this); Bridge.PushSnapshot(); _ready.TrySetResult(); }); };
-            core.Navigate(WebShell.Origin + "index.html");
+            (Bridge, RuntimeVersion) = await AppShell.StartAsync(Web, Boot, Engine, Dispatcher, HostCommand, Engine.Dispatch, SelfTest.Enabled, Program.Fresh, "NexysBus.exe", "bus/web",
+                b => { BusStore.Load(this); b.PushSnapshot(); _ready.TrySetResult(); });
         }
-        catch (Exception ex)
-        {
-            Diag.Trace("webview init failed " + ex);
-            Boot.Text = "WebView2 runtime not available: " + ex.Message + "\nInstall the Evergreen WebView2 Runtime or place a Fixed Version runtime in the WebView2Runtime folder next to NexysBus.exe, then start again.";
-            _ready.TrySetException(ex);
-        }
+        catch (Exception ex) { Diag.Trace("webview init failed " + ex); Boot.Text = AppShell.StartFailedText(ex, "NexysBus.exe"); _ready.TrySetException(ex); }
     }
 
     /// <summary>Host-only commands (WPF dialogs, files); the shared ones live in <see cref="HostCommands"/>.</summary>
@@ -67,7 +44,7 @@ public partial class MainWindow : Window
         {
             case "openDialog":
                 {
-                    var dlg = new OpenFileDialog { Filter = "Bus files|*.nxb;*.mon;*.pcapng;*.pcap;*.CPJ;*.CDV;*.csv;*.xlsx;*.json;*.xml|NexysBus project|*.nxb|1553 capture|*.mon|ARINC 664 capture|*.pcapng;*.pcap|Simulator project|*.CPJ;*.CDV|ICD|*.csv;*.xlsx;*.json;*.xml|All|*.*", Multiselect = true };
+                    var dlg = new OpenFileDialog { Filter = "Bus files|*.nxb;*.mon;*.CPJ;*.CDV;*.csv;*.xlsx;*.json;*.xml|NexysBus project|*.nxb|1553 capture|*.mon|Simulator project|*.CPJ;*.CDV|ICD|*.csv;*.xlsx;*.json;*.xml|All|*.*", Multiselect = true };
                     if (dlg.ShowDialog(this) == true) foreach (var f in dlg.FileNames) Engine.OpenAny(f);
                     return null;
                 }
@@ -115,37 +92,6 @@ public partial class MainWindow : Window
                     else Engine.SetStatus((exe == null ? "Nexys VIEW is not installed — " : "") + $"trend written to {path}");
                     return path;
                 }
-            case "afdx.open":
-                {
-                    var dlg = new OpenFileDialog { Title = "Open ARINC 664 capture", Filter = "Packet capture|*.pcapng;*.pcap|All|*.*" };
-                    if (dlg.ShowDialog(this) != true) return null; Engine.OpenAny(dlg.FileName); return dlg.FileName;
-                }
-            case "afdx.interop.export":
-                {
-                    var dlg = new SaveFileDialog { Title = "Interoperability report", Filter = "Markdown|*.md", FileName = "interop-report.md" };
-                    if (dlg.ShowDialog(this) != true) return null; return Engine.Afdx.ExportReport(dlg.FileName);
-                }
-            case "afdx.peer.importCsv":
-                {
-                    var dlg = new OpenFileDialog { Title = "Peer report (CSV: vl, rx_a, rx_b, errors, note)", Filter = "CSV|*.csv;*.txt|All|*.*" };
-                    if (dlg.ShowDialog(this) != true) return null; return Engine.Afdx.ImportPeerCsv(dlg.FileName);
-                }
-            case "afdx.wireshark.export":
-                {
-                    var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "Folder for the Wireshark profile (plugins + profiles)" };
-                    if (dlg.ShowDialog(this) != true) return null; var dir = Path.Combine(dlg.FolderName, "NexysBus-Wireshark");
-                    NexysBus.App.Services.WiresharkProfile.Write(dir, Engine.Project.Icd, AppInfo.Name + " " + AppInfo.VersionText); Engine.SetStatus("Wireshark profile → " + dir); return dir;
-                }
-            case "afdx.icd.exportCsv":
-                {
-                    var dlg = new SaveFileDialog { Title = "ARINC 664 ICD (CSV)", Filter = "CSV|*.csv", FileName = Engine.Project.Name.Replace(' ', '_') + "_afdx_icd.csv" };
-                    if (dlg.ShowDialog(this) != true) return null; File.WriteAllText(dlg.FileName, NexysView.Core.Arinc664.AfdxIcd.ToCsv(Engine.Project.Icd)); Engine.SetStatus("ICD → " + dlg.FileName); return dlg.FileName;
-                }
-            case "afdx.icd.import":
-                {
-                    var dlg = new OpenFileDialog { Title = "ARINC 664 ICD (CSV / XLSX / hub JSON)", Filter = "ICD|*.csv;*.xlsx;*.json|All|*.*" };
-                    if (dlg.ShowDialog(this) != true) return null; Engine.Mil1553.LoadIcd(dlg.FileName); return dlg.FileName;
-                }
             case "capture": { string path = args.GetProperty("path").GetString()!; await CaptureAsync(path); return path; }
             case "quit": Close(); return null;
         }
@@ -154,11 +100,5 @@ public partial class MainWindow : Window
         throw new NotSupportedException("unknown command " + cmd);
     }
 
-    /// <summary>Screenshot of the page (what the user sees) as PNG.</summary>
-    public async Task CaptureAsync(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var fs = File.Create(path);
-        await Web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, fs);
-    }
+    public Task CaptureAsync(string path) => AppShell.CaptureAsync(Web, path);
 }

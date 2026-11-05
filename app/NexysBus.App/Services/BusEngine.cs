@@ -14,41 +14,32 @@ public sealed class BusEngine : EngineBase
     public bool Dirty { get; set; }
     public List<string> Recent { get; } = new();
     public SimulationService Sim { get; }
-    public static readonly string[] Rails = { "START", "PROJECT", "ANALYZE", "SIMULATE", "ICD", "INTEROP", "SETTINGS" };
-    /// <summary>ARINC 664 side, created on first use by an arinc664 project (a 1553 project never loads it — start-memory gate).</summary>
-    AfdxService? _afdx;
-    public AfdxService Afdx => _afdx ??= new AfdxService(this);
-    public bool AfdxLoaded => _afdx != null;
+    public static readonly string[] Rails = { "START", "PROJECT", "ANALYZE", "SIMULATE", "ICD", "SETTINGS" };
     public override string BusModeName => "ANALYZE";
 
     public BusEngine()
     {
         Mode = "START"; Sim = new SimulationService(this); Driver = DriverBinding.Load(DriverBinding.DefaultCandidates("NexysBus"));
         Mil1553.SetHub(Project.Icd, "(project)");
-        Mil1553.HubChanged += hub => { if (!ReferenceEquals(hub, Project.Icd)) { Project.SetIcd(hub); Dirty = true; } if (hub.IsAfdx && !Project.IsAfdx) UseProtocol("arinc664"); if (hub.IsAfdx) SetStatus($"ICD {hub.Source}: {hub.Vls!.Count} virtual links, {hub.Vls.Sum(v => v.Ports.Sum(p => p.Params.Count))} parameters (ARINC 664)"); Touch(); };
+        Mil1553.HubChanged += hub => { if (!ReferenceEquals(hub, Project.Icd)) { Project.SetIcd(hub); Dirty = true; } Touch(); };
     }
 
     // ------------------------------------------------------------------ project
-    public void NewProject(string? name, string protocol = "mil1553")
+    public void NewProject(string? name)
     {
         StopAll();
         Project = new BusProject { Name = string.IsNullOrWhiteSpace(name) ? "New project" : name!.Trim() };
-        if (protocol == "arinc664") UseProtocol("arinc664");
         Mil1553.SetHub(Project.Icd, "(project)"); Dirty = false; Mode = "PROJECT"; SetStatus($"Project '{Project.Name}' created — pick a device, load an ICD, then SIMULATE"); Touch();
     }
-    /// <summary>Stop whatever runs (1553 frame, ARINC 664 sender) — the 664 side only when it was ever created.</summary>
-    public void StopAll() { Sim.Stop(); _afdx?.Stop(); }
-    /// <summary>Switch the project's protocol (arinc664 creates its settings and a schema 1.1 hub part).</summary>
-    public void UseProtocol(string protocol)
-    {
-        if (protocol == "arinc664") { Project.Protocol = "arinc664"; Project.Afdx ??= new NexysView.Core.Arinc664.AfdxProjectSettings(); Project.Icd.Schema = "1.1"; Project.Icd.Vls ??= new(); }
-        else { Project.Protocol = "mil1553"; }
-        Dirty = true;
-    }
+    public void StopAll() => Sim.Stop();
+    /// <summary>The .nxb protocol field stays in the file (compatibility); a project of another protocol belongs to NexysNet (RUN-SPLIT).</summary>
+    public static bool IsBusProtocol(string protocol) => protocol is "" or "mil1553";
     public void OpenProject(string path)
     {
+        var loaded = BusProject.Load(path);
+        if (!IsBusProtocol(loaded.Protocol)) { SetStatus($"{Path.GetFileName(path)} is a network project (protocol '{loaded.Protocol}') — open it in NexysNet"); SetLed("error"); Touch(); return; }
         StopAll();
-        Project = BusProject.Load(path); Mil1553.SetHub(Project.Icd, path); AddRecent(path); Dirty = false; Mode = "PROJECT";
+        Project = loaded; Mil1553.SetHub(Project.Icd, path); AddRecent(path); Dirty = false; Mode = "PROJECT";
         SetStatus($"Project {Path.GetFileName(path)}: {Project.Icd.Messages.Count} messages, device {Project.Device}"); Touch();
     }
     public string SaveProject(string? path)
@@ -66,7 +57,6 @@ public sealed class BusEngine : EngineBase
         {
             if (ext == ".nxb") OpenProject(path);
             else if (ext == ".mon") { OpenFile(path); Mode = "ANALYZE"; Touch(); }
-            else if (ext is ".pcapng" or ".pcap") { if (!Project.IsAfdx) UseProtocol("arinc664"); Afdx.OpenCapture(path); }
             else if (ext is ".cpj" or ".cdv") ImportSimulator(path);
             else if (ext is ".csv" or ".xlsx" or ".json" or ".xml") { Mil1553.LoadIcd(path); Mode = "ICD"; Touch(); }
             else SetStatus("Unsupported file: " + Path.GetFileName(path));
@@ -88,7 +78,6 @@ public sealed class BusEngine : EngineBase
         switch (field)
         {
             case "name": p.Name = v.GetString() ?? p.Name; break;
-            case "protocol": StopAll(); UseProtocol(v.GetString() == "arinc664" ? "arinc664" : "mil1553"); break;
             case "device": p.Device = v.GetString() == "virtual" ? "virtual" : v.GetString() ?? "virtual"; break;
             case "channel": p.Bus.Channel = Math.Clamp(v.GetInt32(), 0, 3); break;
             case "monitorChannel": p.Bus.MonitorChannel = Math.Clamp(v.GetInt32(), -1, 3); break;
@@ -131,7 +120,6 @@ public sealed class BusEngine : EngineBase
     /// <summary>Devices offered in PROJECT: the virtual bus always, then the cards the driver reported on the last search (ids hw0, hw1 …).</summary>
     public List<object> Devices()
     {
-        if (Project.IsAfdx) return NetworkDevices();
         var l = new List<object> { new { id = "virtual", kind = "virtual", name = "Virtual bus", detail = "software BC + simulated RTs + monitor", available = true } };
         for (int i = 0; i < _cards.Count; i++) l.Add(new { id = $"hw{i}", kind = _cards[i].Kind, name = _cards[i].Name, detail = _cards[i].Detail, available = true, channels = _cards[i].Channels?.Select(c => new { c.Channel, c.Is1553, c.MultiMode, c.ConcurrentMonitor, text = c.Text }).ToList() });
         return l;
@@ -143,20 +131,8 @@ public sealed class BusEngine : EngineBase
         _cards = Driver == null ? new List<DeviceInfo>() : HardwareBusDevice.Enumerate(Driver, maxCards: Math.Clamp(Driver.MaxCards, 1, 16)).ToList();
         SetStatus(Driver == null ? "Hardware search: no driver binding on this PC (driver.json next to the exe or in %LOCALAPPDATA%\\NexysBus) — the virtual bus stays available"
             : _cards.Count == 0 ? (HardwareBusDevice.LastEnumerateError.Length > 0 ? "Hardware search: " + HardwareBusDevice.LastEnumerateError : $"Hardware search: the driver ({Path.GetFileName(Driver.CardLibrary)}) reports no card") : $"Hardware search: {_cards.Count} card(s) — pick one in PROJECT › DEVICE");
-        if (!Project.IsAfdx && _cards.Count == 0 && Project.Device != "virtual") { Project.Device = "virtual"; Dirty = true; }
+        if (_cards.Count == 0 && Project.Device != "virtual") { Project.Device = "virtual"; Dirty = true; }
         Touch(); return Devices();
-    }
-    /// <summary>ARINC 664 devices: the virtual network always; Ethernet ports when the packet-capture library is installed; the dedicated card slot.</summary>
-    List<object> NetworkDevices()
-    {
-        bool pcap = NexysView.Core.Arinc664.Pcap.Available;
-        return new List<object>
-        {
-            new { id = "virtual", kind = "virtual", name = "Virtual network", detail = "A/B loopback in software · delay, loss, duplication and skew injection", available = true },
-            new { id = "local", kind = "virtual", name = "Shared virtual network (this PC)", detail = "every NexysBus instance on this PC that picks it sees the frames of the others (loopback multicast, nothing leaves the PC) — e.g. one instance SIMULATEs, another ANALYZEs", available = true },
-            new { id = "network", kind = "network", name = "Ethernet ports (A / B)", detail = pcap ? "packet-capture library found — pick the ports for network A and B below" : "needs the packet-capture library (Npcap, installed separately — not shipped with NexysBus)", available = pcap },
-            new { id = "afdxcard", kind = "card", name = "AFDX end-system card", detail = "interface reserved for a vendor card adapter — not available in this release", available = false },
-        };
     }
     public static int CardIndex(string device) => device.StartsWith("hw") && int.TryParse(device.AsSpan(2), out int n) ? n : 0;
 
@@ -164,11 +140,10 @@ public sealed class BusEngine : EngineBase
     public bool Dispatch(string cmd, JsonElement r, out object? result)
     {
         result = null;
-        if (cmd.StartsWith("afdx.", StringComparison.Ordinal)) return Afdx.Dispatch(cmd, r, out result);
         switch (cmd)
         {
             case "rail": { string m = Bridge.S(r, "name", "START").ToUpperInvariant(); Mode = Rails.Contains(m) ? m : "START"; Touch(); return true; }
-            case "project.new": NewProject(Bridge.S(r, "name"), Bridge.S(r, "protocol", "mil1553")); return true;
+            case "project.new": NewProject(Bridge.S(r, "name")); return true;
             case "project.openPath": OpenProject(Bridge.S(r, "path")); return true;
             case "project.saveTo": result = SaveProject(Bridge.S(r, "path")); return true;
             case "project.set": SetProjectField(Bridge.S(r, "field"), r.GetProperty("value")); return true;
@@ -193,7 +168,7 @@ public sealed class BusEngine : EngineBase
     protected override void ExtendSnapshot(Dictionary<string, object?> s)
     {
         s["rail"] = Mode; s["recent"] = Recent.Where(File.Exists).Select(p => new { path = p, name = Path.GetFileNameWithoutExtension(p), dir = Path.GetDirectoryName(p) }).ToList();
-        s["devices"] = Devices(); s["driver"] = new { bound = Driver != null, path = Driver?.Path ?? "", searched = _searched, cards = _cards.Count }; s["project"] = ProjectDto(); s["sim"] = Sim.Dto(); s["afdx"] = Project.IsAfdx ? Afdx.Dto() : null;
+        s["devices"] = Devices(); s["driver"] = new { bound = Driver != null, path = Driver?.Path ?? "", searched = _searched, cards = _cards.Count }; s["project"] = ProjectDto(); s["sim"] = Sim.Dto();
     }
 
     object ProjectDto()
@@ -210,44 +185,34 @@ public sealed class BusEngine : EngineBase
     }
 }
 
-/// <summary>settings.json under %LOCALAPPDATA%\NexysBus: theme, plot theme, bus time display, template folder, recent projects, filter presets, window.</summary>
+/// <summary>settings.json under %LOCALAPPDATA%\NexysBus: the shared shell settings (theme, plot, recent projects, window, tour — nexys-core
+/// <see cref="ShellStore"/>) plus bus time display, template folder and filter presets. The file keeps its field names (compatible).</summary>
 public static class BusStore
 {
-    public sealed class Dto
+    public sealed class Dto : ShellSettings
     {
-        public string Theme { get; set; } = "light"; public string Plot { get; set; } = "dark"; public string BusTime { get; set; } = "rel";
-        public string TemplateDir { get; set; } = ""; public List<string> Recent { get; set; } = new(); public List<Mil1553Service.FilterPreset> BusFilters { get; set; } = new();
-        public double W { get; set; } = 1440; public double H { get; set; } = 900; public double X { get; set; } = double.NaN; public double Y { get; set; } = double.NaN; public bool Maximized { get; set; }
-        public bool TourSeen { get; set; }
+        public string BusTime { get; set; } = "rel"; public string TemplateDir { get; set; } = ""; public List<Mil1553Service.FilterPreset> BusFilters { get; set; } = new();
     }
-    public static string PathFor() => Path.Combine(AppPaths.LocalDir, "settings.json");
+    public static string PathFor() => ShellStore.PathFor();
     static bool _loading;
     public static void Save(MainWindow w)
     {
         if (_loading || SelfTest.Enabled || Program.Fresh) return;
-        try
-        {
-            var e = w.Engine;
-            var d = new Dto { Theme = e.Theme, Plot = e.Plot, BusTime = e.BusTime, TemplateDir = e.IcdTemplateDir, Recent = e.Recent.ToList(), BusFilters = e.Mil1553.Presets.ToList(), W = w.Width, H = w.Height, X = w.Left, Y = w.Top, Maximized = w.WindowState == System.Windows.WindowState.Maximized, TourSeen = e.TourSeen };
-            Directory.CreateDirectory(Path.GetDirectoryName(PathFor())!);
-            File.WriteAllText(PathFor(), JsonSerializer.Serialize(d, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch { }
+        var e = w.Engine; var d = new Dto { BusTime = e.BusTime, TemplateDir = e.IcdTemplateDir, BusFilters = e.Mil1553.Presets.ToList() };
+        ShellStore.Capture(d, w, e, e.Recent, e.TourSeen); ShellStore.Write(d);
     }
     public static void Load(MainWindow w)
     {
-        if (!File.Exists(PathFor()) || Program.Fresh) return;
+        if (Program.Fresh) return;
+        var d = ShellStore.Read<Dto>(); if (d == null) return;
         _loading = true;
         try
         {
-            var d = JsonSerializer.Deserialize<Dto>(File.ReadAllText(PathFor())); if (d == null) return; var e = w.Engine;
-            e.Theme = d.Theme is "light" or "dark" ? d.Theme : "light"; e.Plot = d.Plot is "light" or "dark" ? d.Plot : "dark";
+            var e = w.Engine; ShellStore.ApplyTheme(d, e);
             if (SelfTest.Enabled) return;
             e.BusTime = d.BusTime is "abs" or "delta" ? d.BusTime : "rel"; e.IcdTemplateDir = d.TemplateDir ?? ""; e.Recent.Clear(); e.Recent.AddRange(d.Recent.Where(File.Exists)); e.Mil1553.Presets.Clear(); e.Mil1553.Presets.AddRange(d.BusFilters ?? new()); e.TourSeen = d.TourSeen;
-            if (!double.IsNaN(d.X) && d.W > 300) { w.Left = d.X; w.Top = d.Y; w.Width = d.W; w.Height = d.H; }
-            if (d.Maximized) w.WindowState = System.Windows.WindowState.Maximized;
+            ShellStore.ApplyWindow(d, w);
         }
-        catch { }
         finally { _loading = false; }
     }
 }

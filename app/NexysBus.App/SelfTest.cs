@@ -14,68 +14,45 @@ namespace NexysBus.App;
 /// moved from the viewer), --v0100 (1M-record performance gates), --stress --iter N, --shot. Captures are WebView2 previews.</summary>
 public static partial class SelfTest
 {
-    public static string[] Args = Array.Empty<string>();
-    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site" or "--icdxml" or "--afdx" or "--interop" or "--interop-tx";
-    static readonly List<string> Log = new();
-    public static string OutDir = "";
-    static readonly List<string> Gate = new();
+    public static string[] Args { get => SelfTestKit.Args; set => SelfTestKit.Args = value; }
+    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site" or "--icdxml";
+    public static string OutDir { get => SelfTestKit.OutDir; set => SelfTestKit.OutDir = value; }
     static readonly Random Rng = new(7);
 
-    public static void L(string s) { lock (Log) Log.Add($"{DateTime.Now:HH:mm:ss.fff} {s}"); Console.WriteLine(s); }
-    static void G(string k, double v, string unit, string? gate = null) { var s = $"{k}\t{v:F3} {unit}" + (gate != null ? $"\tgate {gate}" : ""); Gate.Add(s); L(s); }
-    static void GB(string k, bool ok, string detail) { var s = $"{k}\t{(ok ? "PASS" : "FAIL")}\t{detail}"; Gate.Add(s); L(s); }
-    static string Arg(string name, string dflt = "") { int i = Array.IndexOf(Args, name); return i >= 0 && i + 1 < Args.Length ? Args[i + 1] : dflt; }
-    static string J(string s) => JsonSerializer.Serialize(s);
-    static long WsMb() => Process.GetCurrentProcess().WorkingSet64 >> 20;
-
-    public static async Task RunAsync(MainWindow w)
-    {
-        try
-        {
-            OutDir = Arg("--out", Path.Combine(Directory.GetCurrentDirectory(), "selftest"));
-            Directory.CreateDirectory(OutDir);
-            await Idle(w, 300);
-            w.Width += 1440 - w.Web.ActualWidth; w.Height += 900 - w.Web.ActualHeight;   // page = 1440×900 CSS px
-            await Idle(w, 300);
-            L($"page size {w.Web.ActualWidth}x{w.Web.ActualHeight} dpr {VisualTreeHelper.GetDpi(w).DpiScaleX}");
-            if (Args[0] == "--bus") await BusPath(w);
-            else if (Args[0] == "--v100rc") await V100(w);
-            else if (Args[0] == "--v0100") await V0100(w);
-            else if (Args[0] == "--stress") await Stress(w);
-            else if (Args[0] == "--uishots") await UiShots(w);
-            else if (Args[0] == "--uishots2") await UiShots2(w);
-            else if (Args[0] == "--hw") await Hw(w);
-            else if (Args[0] == "--site") await Site(w);
-            else if (Args[0] == "--icdxml") IcdXmlGate();
-            else if (Args[0] == "--afdx") await Afdx(w);
-            else if (Args[0] == "--interop") await Interop(w);
-            else if (Args[0] == "--interop-tx") await InteropTx(w);
-            else if (Args[0] == "--shot")
-            {
-                // --shot --rail NAME [--click SELECTOR[;SELECTOR…]] [--wait ms] --name file: optional clicks after the rail switch (e.g. [data-a=searchHw] on PROJECT with a card)
-                await JS(w, $"await nx.test.rail({J(Arg("--rail", "START"))}); return true;");
-                foreach (var sel in Arg("--click").Split(';', StringSplitOptions.RemoveEmptyEntries)) { await JS(w, $"await nx.test.clickSel({J(sel)}); return true;"); await Idle(w, int.TryParse(Arg("--wait", "400"), out int ms) ? ms : 400); }
-                // --js "<body>" runs test-hook JavaScript (window.nx.test.*) before the capture; "--js @file" reads it from a file
-                string js = Arg("--js"); if (js.StartsWith("@")) js = File.ReadAllText(js[1..]);
-                if (js.Length > 0) { var r = await JS(w, js, 600000); L("js result: " + r.ToString()); await Idle(w, int.TryParse(Arg("--wait", "400"), out int ms2) ? ms2 : 400); }
-                await Shot(w, Arg("--name", "shot"));
-            }
-        }
-        catch (Exception ex) { L("FATAL " + ex); }
-        finally
-        {
-            File.WriteAllLines(Path.Combine(OutDir, "selftest.log"), Log);
-            if (Gate.Count > 0) File.WriteAllLines(Path.Combine(OutDir, "gates.txt"), Gate);
-            L($"DONE fail={Gate.Count(s => s.Contains("\tFAIL"))}");
-            await Task.Delay(200);
-            Application.Current.Shutdown(0);
-        }
-    }
-
-    static async Task Idle(MainWindow w, int ms = 50) { await w.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle); await Task.Delay(ms); }
+    public static void L(string s) => SelfTestKit.L(s);
+    static void G(string k, double v, string unit, string? gate = null) => SelfTestKit.G(k, v, unit, gate);
+    static void GB(string k, bool ok, string detail) => SelfTestKit.GB(k, ok, detail);
+    static string Arg(string name, string dflt = "") => SelfTestKit.Arg(name, dflt);
+    static string J(string s) => SelfTestKit.J(s);
+    static long WsMb() => SelfTestKit.WsMb();
+    static Task Idle(MainWindow w, int ms = 50) => SelfTestKit.Idle(w, ms);
     static Task<JsonElement> JS(MainWindow w, string body, int timeoutMs = 60000) => w.Bridge!.RunTest(body, timeoutMs);
-    static async Task Shot(MainWindow w, string name) { await JS(w, "await nx.test.settle(); return true;"); await Idle(w, 150); await w.CaptureAsync(Path.Combine(OutDir, name + ".png")); L($"shot {name}.png"); }
-    static string RepoRoot() { var d = new DirectoryInfo(AppContext.BaseDirectory); while (d != null && !File.Exists(Path.Combine(d.FullName, "CLAUDE.md"))) d = d.Parent; return d?.FullName ?? Directory.GetCurrentDirectory(); }
+    static Task Shot(MainWindow w, string name) => SelfTestKit.Shot(w.Bridge!, w.Web, name);
+    static string RepoRoot() => SelfTestKit.RepoRoot();
+
+    /// <summary>Runner = the shared <see cref="SelfTestKit"/> (page size, selftest.log, gates.txt, shutdown); this class keeps the scenarios.</summary>
+    public static Task RunAsync(MainWindow w) => SelfTestKit.RunAsync(w, w.Web, async () =>
+    {
+        if (Args[0] == "--bus") await BusPath(w);
+        else if (Args[0] == "--v100rc") await V100(w);
+        else if (Args[0] == "--v0100") await V0100(w);
+        else if (Args[0] == "--stress") await Stress(w);
+        else if (Args[0] == "--uishots") await UiShots(w);
+        else if (Args[0] == "--uishots2") await UiShots2(w);
+        else if (Args[0] == "--hw") await Hw(w);
+        else if (Args[0] == "--site") await Site(w);
+        else if (Args[0] == "--icdxml") IcdXmlGate();
+        else if (Args[0] == "--shot")
+        {
+            // --shot --rail NAME [--click SELECTOR[;SELECTOR…]] [--wait ms] --name file: optional clicks after the rail switch (e.g. [data-a=searchHw] on PROJECT with a card)
+            await JS(w, $"await nx.test.rail({J(Arg("--rail", "START"))}); return true;");
+            foreach (var sel in Arg("--click").Split(';', StringSplitOptions.RemoveEmptyEntries)) { await JS(w, $"await nx.test.clickSel({J(sel)}); return true;"); await Idle(w, int.TryParse(Arg("--wait", "400"), out int ms) ? ms : 400); }
+            // --js "<body>" runs test-hook JavaScript (window.nx.test.*) before the capture; "--js @file" reads it from a file
+            string js = Arg("--js"); if (js.StartsWith("@")) js = File.ReadAllText(js[1..]);
+            if (js.Length > 0) { var r = await JS(w, js, 600000); L("js result: " + r.ToString()); await Idle(w, int.TryParse(Arg("--wait", "400"), out int ms2) ? ms2 : 400); }
+            await Shot(w, Arg("--name", "shot"));
+        }
+    });
 
     // ================================================================== --bus: the real user path
     static async Task BusPath(MainWindow w)
@@ -200,7 +177,7 @@ public static partial class SelfTest
         await Shot(w, "bus_10_about"); await JS(w, "document.querySelector('.modal-bg')?.remove(); return true;");
         var forbidden = Arg("--forbid").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var hits = forbidden.Where(f => about.Contains(f, StringComparison.OrdinalIgnoreCase) || helpText.Contains(f, StringComparison.OrdinalIgnoreCase)).ToList();
-        GB("settings_help_about", secs == 4 && helpOk && helpSections == 8 && about.Contains(AppInfo.VersionText) && hits.Count == 0, $"settings sections={secs} help simulate={helpOk} sections={helpSections} about version={about.Contains(AppInfo.VersionText)} third-party hits={hits.Count}");
+        GB("settings_help_about", secs == 4 && helpOk && helpSections == 7 && about.Contains(AppInfo.VersionText) && hits.Count == 0, $"settings sections={secs} help simulate={helpOk} sections={helpSections} about version={about.Contains(AppInfo.VersionText)} third-party hits={hits.Count}");
         e.Theme = "dark"; e.Touch(); await JS(w, "await nx.test.rail('SIMULATE'); await nx.test.settle(); return true;"); await Idle(w, 200); await Shot(w, "bus_11_dark_simulate");
         await JS(w, "await nx.test.rail('ANALYZE'); await nx.test.settle(); return true;"); await Idle(w, 200); await Shot(w, "bus_12_dark_analyze");
         var scan = await JS(w, "return JSON.stringify(nx.test.accentScan());");

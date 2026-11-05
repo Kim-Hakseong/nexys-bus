@@ -11,18 +11,16 @@ export class ProjectPage {
       const a = (t.closest('[data-a]') as HTMLElement | null)?.dataset.a; if (!a) return;
       if (a === 'save') bridge.call('project.save'); else if (a === 'saveAs') bridge.call('project.save', { as: true }); else if (a === 'close') bridge.call('project.close');
       else if (a === 'pickCapture') bridge.call('project.pickCaptureDir'); else if (a === 'icd') bridge.call('rail', { name: 'ICD' }); else if (a === 'simulate') bridge.call('rail', { name: 'SIMULATE' });
-      else if (a === 'icd664') bridge.call('rail', { name: 'ICD' }); else if (a === 'interop') bridge.call('rail', { name: 'INTEROP' });
       else if (a === 'importSim') bridge.call('project.importSim'); else if (a === 'exportSim') bridge.call('project.exportSim'); else if (a === 'searchHw') bridge.call('devices.search'); else if (a === 'settings') bridge.call('rail', { name: 'SETTINGS' });
     });
     this.el.addEventListener('change', e => {
-      const t = e.target as HTMLInputElement; if (t.dataset.nic) { bridge.call('afdx.set', { field: t.dataset.nic, value: t.value }); return; } const f = t.dataset.f; if (!f) return;
+      const t = e.target as HTMLInputElement; const f = t.dataset.f; if (!f) return;
       const num = ['channel', 'monitorChannel', 'responseTenthUs', 'gapUs', 'seed'].includes(f); const dbl = f === 'minorFrameMs';
       bridge.call('project.set', { field: f, value: num ? parseInt(t.value, 10) || 0 : dbl ? parseFloat(t.value) || 0 : t.value });
     });
   }
   setState(S: any) {
-    const p = S.project ?? {}; const devs: any[] = S.devices ?? []; const drv: any = S.driver ?? { bound: false, path: '', searched: false, cards: 0 }; const key = JSON.stringify([p, devs, drv, S.afdx?.settings, S.afdx?.icd, this.ports]); if (key === this.key) return; this.key = key;
-    if (p.protocol === 'arinc664') { this.render664(S, p, devs); return; }
+    const p = S.project ?? {}; const devs: any[] = S.devices ?? []; const drv: any = S.driver ?? { bound: false, path: '', searched: false, cards: 0 }; const key = JSON.stringify([p, devs, drv]); if (key === this.key) return; this.key = key;
     const b = p.bus ?? {}; const icd = p.icd ?? {};
     const row = (k: string, body: string) => `<div class="row2"><span class="k">${k}</span>${body}</div>`;
     const inp = (f: string, v: any, cls = 'in', extra = '') => `<input class="${cls}" data-f="${f}" value="${esc(v ?? '')}"${extra}>`;
@@ -51,35 +49,8 @@ export class ProjectPage {
         ${row('TEMPLATE', `<span class="mono muted11" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.templateDir || '(none — project files are skipped on export)')}</span><span class="d"><button class="pill h24" data-a="settings">SETTINGS</button></span>`)}
       </div></section>`;
   }
-  private ports: any = null;
-  private protoSel(p: any) { return `<select class="sel" data-f="protocol"><option value="mil1553"${p.protocol !== 'arinc664' ? ' selected' : ''}>MIL-STD-1553</option><option value="arinc664"${p.protocol === 'arinc664' ? ' selected' : ''}>ARINC 664 (AFDX)</option></select><span class="d">Switching keeps the ICD hub; each protocol keeps its own settings</span>`; }
-  private render664(S: any, p: any, devs: any[]) {
-    const a = S.afdx ?? {}; const st = a.settings ?? {}; const icd = a.icd ?? {};
-    if (!this.ports) bridge.call('afdx.ports').then(r => { this.ports = r; this.key = ''; this.setState(S); });
-    const ports: any[] = this.ports?.ports ?? [];
-    const row = (k: string, body: string) => `<div class="row2"><span class="k">${k}</span>${body}</div>`;
-    const inp = (f: string, v: any, cls = 'in', extra = '') => `<input class="${cls}" data-f="${f}" value="${esc(v ?? '')}"${extra}>`;
-    const nicSel = (f: string, v: string) => `<select class="sel" data-nic="${f}"${ports.length ? '' : ' disabled'}><option value="">— not used —</option>${ports.map(x => `<option value="${esc(x.id)}"${x.id === v ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`;
-    this.el.innerHTML = `
-      <section class="card"><div class="card-h"><span class="t">PROJECT</span><span class="m">${esc(p.path ? p.path.split(/[\\/]/).pop() : 'unsaved')}</span></div><div class="body-p">
-        ${row('NAME', inp('name', p.name))}
-        ${row('PROTOCOL', this.protoSel(p))}
-        ${row('FILE', `<span class="mono muted11" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.path || '(not saved yet)')}</span><span class="d"><button class="pill h24" data-a="save">SAVE</button> <button class="pill h24" data-a="saveAs">SAVE AS…</button> <button class="pill h24" data-a="close">CLOSE</button></span>`)}
-        ${row('CAPTURE FOLDER', inp('captureDir', p.captureDir, 'in', ' placeholder="%LOCALAPPDATA%\\NexysBus\\captures"') + `<button class="pill h24" data-a="pickCapture">PICK…</button>`)}
-      </div></section>
-      <section class="card"><div class="card-h"><span class="t">DEVICE</span><span class="m">${devs.filter(d => d.available).length} available</span></div><div class="body-p"><div class="dev-list">
-        ${devs.map(d => `<div class="dev${d.id === p.device ? ' on' : ''}${d.available ? '' : ' off'}" data-dev="${esc(d.id)}"><span class="ic">${d.kind === 'virtual' ? '▣' : '▢'}</span><div><div class="nm">${esc(d.name)}</div><div class="dt">${esc(d.detail)}</div></div><span class="chip">${d.id === p.device ? 'SELECTED' : d.available ? 'AVAILABLE' : 'UNAVAILABLE'}</span></div>`).join('')}
-      </div></div></section>
-      <section class="card"><div class="card-h"><span class="t">NETWORK</span><span class="m">${this.ports?.available ? 'packet-capture library: ' + esc(this.ports.library) : 'no packet-capture library — virtual network only'}</span></div><div class="body-p">
-        ${row('NETWORK A', nicSel('nicA', st.nicA ?? '') + `<span class="d">Ethernet port of network A</span>`)}
-        ${row('NETWORK B', nicSel('nicB', st.nicB ?? '') + `<span class="d">Port of network B (the same port = frames told apart by source MAC)</span>`)}
-        ${row('CHECKS', `<span class="muted11">Jmax ${st.jmaxMs ?? 0.5} ms · skew limit ${st.skewMaxMs ?? 10} ms · pair window ${st.pairWindowMs ?? 20} ms</span><span class="d"><button class="pill h24" data-a="interop">INTEROP →</button></span>`)}
-      </div></section>
-      <section class="card"><div class="card-h"><span class="t">ICD · VIRTUAL LINKS</span><span class="m">${esc(icd.source || 'no ICD')}</span></div><div class="body-p">
-        <div class="stat-row"><div><div class="k">VLs</div><div class="v">${icd.vls ?? 0}</div></div><div><div class="k">PORTS</div><div class="v">${icd.ports ?? 0}</div></div><div><div class="k">PARAMS</div><div class="v">${icd.params ?? 0}</div></div><div><div class="k">ERRORS</div><div class="v${icd.errors ? ' errv' : ''}">${icd.errors ?? 0}</div></div></div>
-        ${row('', `<button class="pill h24 primary" data-a="icd664">ICD →</button><button class="pill h24" data-a="simulate">SIMULATE →</button>`)}
-      </div></section>`;
-  }
+  /** The .nxb protocol field stays (compatibility): bus projects are MIL-STD-1553; ARINC 429 is capture analysis in ANALYZE. */
+  private protoSel(p: any) { return `<select class="sel" data-f="protocol" disabled><option value="mil1553" selected>MIL-STD-1553</option><option value="a429">ARINC 429 (capture analysis in ANALYZE)</option></select><span class="d">Bus simulation runs MIL-STD-1553; ARINC 429 captures open in ANALYZE</span>`; }
   testApi() {
     const self = this;
     return {
