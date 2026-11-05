@@ -186,8 +186,7 @@ export class AfdxAnalyzePage {
   }
   async trend(vl: number, param: string) {
     const ch = await bridge.call<string | null>('afdx.trend', { vl, param }); if (!ch) return;
-    if (this.chartId < 0) this.chartId = await bridge.call<number>('m1553.chart');
-    const c = this.S?.charts?.find((x: any) => x.id === this.chartId); if (c) for (const _ of c.curves) await bridge.call('removeCurve', { chart: this.chartId, idx: 0 });
+    this.chartId = await bridge.call<number>('m1553.chart', { clear: true });
     await bridge.call('addCurves', { chart: this.chartId, channels: [ch], zone: 'plot' }); (this.el.querySelector('[data-pm]') as HTMLElement).textContent = `VL ${vl} · ${param}`;
   }
   testApi() {

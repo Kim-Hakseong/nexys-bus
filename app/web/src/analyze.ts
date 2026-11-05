@@ -264,9 +264,8 @@ export class BusMode {
   }
   // ---------- trend (ui-feedback 7: word · unit · window · send to Nexys VIEW)
   async trend(channelId: string, label: string) {
-    if (this.chartId < 0) this.chartId = await bridge.call<number>('m1553.chart');
-    const c = this.S?.charts.find(c => c.id === this.chartId);
-    if (c) for (const _ of c.curves) await bridge.call('removeCurve', { chart: this.chartId, idx: 0 });
+    // the host empties the chart (the snapshot's curve list can lag behind a growing run and leave the old curve first)
+    this.chartId = await bridge.call<number>('m1553.chart', { clear: true });
     await bridge.call('addCurves', { chart: this.chartId, channels: [channelId], zone: 'plot' });
     this.trendChannel = channelId; this.plotMeta.textContent = label; this.renderTrendTools(0);
   }
