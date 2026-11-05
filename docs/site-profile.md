@@ -26,3 +26,18 @@ H0 binding → enumerate → open → channel capabilities (multi- / single-func
 
 ## Files written
 `<tag>_bc.mon` (BC transactions), `<tag>_bm.mon` (monitor channel, when wired), `<tag>_sa_values.txt` (one line per second: received RT→BC words), `gates.txt`, `selftest.log`, `calllog.txt` (driver calls), `site_summary.json`.
+
+## ARINC 664 bench (`afdx` section)
+A profile may carry an `afdx` object. `--site --profile <file>` then runs the ARINC 664 steps first; a profile with only an `afdx` section (no `messages`, no `icd`) stops after them. Example: `site-profiles/example-afdx.json`.
+
+| field | type | meaning |
+|---|---|---|
+| `afdx.icd` | path | ARINC 664 ICD (CSV / XLSX: one row per parameter, columns `vl_id`, `bag_ms`, `lmax`, `network`, `port`, `udp_dst`, `size`, `param`, `offset`, `type`, `endian`, `scale`, `offset_val`, `unit`; or a hub JSON with `vls`), relative to the profile. |
+| `afdx.nicA`, `afdx.nicB` | string | Port of network A / B: the packet-capture device name, or a part of its description as the port list in the log shows it. The same port twice = one port for both networks (frames assigned by the source-MAC interface id). |
+| `afdx.listenSeconds` | number | N1 receive-only capture (default 30). Nothing is transmitted in N1. |
+| `afdx.txVls` | int list | N2: VL ids NexysBus transmits for `sendSeconds` (empty = N2 skipped, nothing is ever sent). |
+| `afdx.expectVls` | int list | VLs the peer must send (N1 gate); empty = every ICD VL not in `txVls`. |
+| `afdx.peerName` | string | Written into the report. |
+| `afdx.jmaxMs`, `afdx.skewMaxMs` | number | Check settings (defaults 0.5 and 10). |
+
+Steps and gates: **N0** packet-capture library present (`afdx_site_library`; without it the steps are skipped — the library is installed separately and never shipped), ports and roles (`afdx_site_ports`), ICD loaded (`afdx_site_icd`). **N1** capture for `listenSeconds` (`afdx_site_listen`: frames received, every expected VL seen; the interoperability checklist is written to the log). **N2** transmit `txVls` while capturing (`afdx_site_send`: frames sent, send errors 0). Files: `afdx_listen.pcapng`, `afdx_send.pcapng`, `interop-report.md` (checklist of the N1 capture + the NexysBus → peer table), `afdx_summary.json`.

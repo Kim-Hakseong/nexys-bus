@@ -31,6 +31,27 @@ public sealed class SiteProfile
     [JsonPropertyName("counter")] public SiteCounter? Counter { get; set; }
     /// <summary>Free notes (wiring, who owns the terminal) — carried into the report only.</summary>
     [JsonPropertyName("notes")] public string Notes { get; set; } = "";
+    /// <summary>ARINC 664 bench (optional): ports, ICD, receive / transmit durations — see docs/site-profile.md "afdx".</summary>
+    [JsonPropertyName("afdx")] public SiteAfdx? Afdx { get; set; }
+
+    public sealed class SiteAfdx
+    {
+        /// <summary>ARINC 664 ICD (CSV / XLSX / hub JSON), relative to the profile file.</summary>
+        [JsonPropertyName("icd")] public string Icd { get; set; } = "";
+        /// <summary>Packet-capture port of network A / B (device name or description as the port list shows it).</summary>
+        [JsonPropertyName("nicA")] public string NicA { get; set; } = "";
+        [JsonPropertyName("nicB")] public string NicB { get; set; } = "";
+        /// <summary>Receive-only capture (N1), seconds.</summary>
+        [JsonPropertyName("listenSeconds")] public double ListenSeconds { get; set; } = 30;
+        /// <summary>N2: also transmit these VL ids (empty = no transmission) for sendSeconds.</summary>
+        [JsonPropertyName("txVls")] public List<int> TxVls { get; set; } = new();
+        [JsonPropertyName("sendSeconds")] public double SendSeconds { get; set; } = 30;
+        /// <summary>VL ids the peer is expected to send (N1 gate); empty = every ICD VL not in txVls.</summary>
+        [JsonPropertyName("expectVls")] public List<int> ExpectVls { get; set; } = new();
+        [JsonPropertyName("peerName")] public string PeerName { get; set; } = "";
+        [JsonPropertyName("jmaxMs")] public double JmaxMs { get; set; } = 0.5;
+        [JsonPropertyName("skewMaxMs")] public double SkewMaxMs { get; set; } = 10;
+    }
     [JsonIgnore] public string Path { get; set; } = "";
 
     public sealed class SiteMessage
@@ -59,6 +80,7 @@ public sealed class SiteProfile
         var p = JsonSerializer.Deserialize<SiteProfile>(File.ReadAllText(path), new JsonSerializerOptions { ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) ?? throw new InvalidDataException("empty profile");
         p.Path = System.IO.Path.GetFullPath(path); p.Bus = p.Bus.ToUpperInvariant() == "B" ? "B" : "A";
         if (p.Icd.Length > 0 && !System.IO.Path.IsPathRooted(p.Icd)) p.Icd = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(p.Path) ?? "", p.Icd);
+        if (p.Afdx != null && p.Afdx.Icd.Length > 0 && !System.IO.Path.IsPathRooted(p.Afdx.Icd)) p.Afdx.Icd = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(p.Path) ?? "", p.Afdx.Icd);
         return p;
     }
 

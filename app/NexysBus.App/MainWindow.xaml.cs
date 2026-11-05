@@ -27,7 +27,7 @@ public partial class MainWindow : Window
         try { Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/brand/AppIcon.ico"), BitmapCreateOptions.None, BitmapCacheOption.OnLoad); } catch { }
         SourceInitialized += (_, _) => AppId.ApplyWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle, _brand.displayName);
         Loaded += async (_, _) => await InitAsync();
-        Closing += (_, _) => { Engine.Sim.Stop(); BusStore.Save(this); };
+        Closing += (_, _) => { Engine.StopAll(); BusStore.Save(this); };
         Engine.Changed += () => { if (Bridge?.PageReady == true) Dispatcher.BeginInvoke(() => BusStore.Save(this), System.Windows.Threading.DispatcherPriority.ApplicationIdle); };
     }
 
@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         {
             case "openDialog":
                 {
-                    var dlg = new OpenFileDialog { Filter = "Bus files|*.nxb;*.mon;*.CPJ;*.CDV;*.csv;*.xlsx;*.json;*.xml|NexysBus project|*.nxb|Bus capture|*.mon|Simulator project|*.CPJ;*.CDV|ICD|*.csv;*.xlsx;*.json;*.xml|All|*.*", Multiselect = true };
+                    var dlg = new OpenFileDialog { Filter = "Bus files|*.nxb;*.mon;*.pcapng;*.pcap;*.CPJ;*.CDV;*.csv;*.xlsx;*.json;*.xml|NexysBus project|*.nxb|1553 capture|*.mon|ARINC 664 capture|*.pcapng;*.pcap|Simulator project|*.CPJ;*.CDV|ICD|*.csv;*.xlsx;*.json;*.xml|All|*.*", Multiselect = true };
                     if (dlg.ShowDialog(this) == true) foreach (var f in dlg.FileNames) Engine.OpenAny(f);
                     return null;
                 }
@@ -114,6 +114,26 @@ public partial class MainWindow : Window
                     if (exe != null && !SelfTest.Enabled) { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe, $"\"{path}\"") { UseShellExecute = true }); Engine.SetStatus($"Sent {ch.Name} to Nexys VIEW ({ch.Length:N0} samples)"); }
                     else Engine.SetStatus((exe == null ? "Nexys VIEW is not installed — " : "") + $"trend written to {path}");
                     return path;
+                }
+            case "afdx.open":
+                {
+                    var dlg = new OpenFileDialog { Title = "Open ARINC 664 capture", Filter = "Packet capture|*.pcapng;*.pcap|All|*.*" };
+                    if (dlg.ShowDialog(this) != true) return null; Engine.OpenAny(dlg.FileName); return dlg.FileName;
+                }
+            case "afdx.interop.export":
+                {
+                    var dlg = new SaveFileDialog { Title = "Interoperability report", Filter = "Markdown|*.md", FileName = "interop-report.md" };
+                    if (dlg.ShowDialog(this) != true) return null; return Engine.Afdx.ExportReport(dlg.FileName);
+                }
+            case "afdx.icd.exportCsv":
+                {
+                    var dlg = new SaveFileDialog { Title = "ARINC 664 ICD (CSV)", Filter = "CSV|*.csv", FileName = Engine.Project.Name.Replace(' ', '_') + "_afdx_icd.csv" };
+                    if (dlg.ShowDialog(this) != true) return null; File.WriteAllText(dlg.FileName, NexysView.Core.Arinc664.AfdxIcd.ToCsv(Engine.Project.Icd)); Engine.SetStatus("ICD → " + dlg.FileName); return dlg.FileName;
+                }
+            case "afdx.icd.import":
+                {
+                    var dlg = new OpenFileDialog { Title = "ARINC 664 ICD (CSV / XLSX / hub JSON)", Filter = "ICD|*.csv;*.xlsx;*.json|All|*.*" };
+                    if (dlg.ShowDialog(this) != true) return null; Engine.Mil1553.LoadIcd(dlg.FileName); return dlg.FileName;
                 }
             case "capture": { string path = args.GetProperty("path").GetString()!; await CaptureAsync(path); return path; }
             case "quit": Close(); return null;

@@ -15,7 +15,7 @@ namespace NexysBus.App;
 public static partial class SelfTest
 {
     public static string[] Args = Array.Empty<string>();
-    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site" or "--icdxml";
+    public static bool Enabled => Args.Length > 0 && Args[0] is "--bus" or "--v100rc" or "--v0100" or "--stress" or "--shot" or "--uishots" or "--uishots2" or "--hw" or "--site" or "--icdxml" or "--afdx";
     static readonly List<string> Log = new();
     public static string OutDir = "";
     static readonly List<string> Gate = new();
@@ -47,6 +47,7 @@ public static partial class SelfTest
             else if (Args[0] == "--hw") await Hw(w);
             else if (Args[0] == "--site") await Site(w);
             else if (Args[0] == "--icdxml") IcdXmlGate();
+            else if (Args[0] == "--afdx") await Afdx(w);
             else if (Args[0] == "--shot")
             {
                 // --shot --rail NAME [--click SELECTOR[;SELECTOR…]] [--wait ms] --name file: optional clicks after the rail switch (e.g. [data-a=searchHw] on PROJECT with a card)
@@ -197,7 +198,7 @@ public static partial class SelfTest
         await Shot(w, "bus_10_about"); await JS(w, "document.querySelector('.modal-bg')?.remove(); return true;");
         var forbidden = Arg("--forbid").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var hits = forbidden.Where(f => about.Contains(f, StringComparison.OrdinalIgnoreCase) || helpText.Contains(f, StringComparison.OrdinalIgnoreCase)).ToList();
-        GB("settings_help_about", secs == 4 && helpOk && helpSections == 7 && about.Contains(AppInfo.VersionText) && hits.Count == 0, $"settings sections={secs} help simulate={helpOk} sections={helpSections} about version={about.Contains(AppInfo.VersionText)} third-party hits={hits.Count}");
+        GB("settings_help_about", secs == 4 && helpOk && helpSections == 8 && about.Contains(AppInfo.VersionText) && hits.Count == 0, $"settings sections={secs} help simulate={helpOk} sections={helpSections} about version={about.Contains(AppInfo.VersionText)} third-party hits={hits.Count}");
         e.Theme = "dark"; e.Touch(); await JS(w, "await nx.test.rail('SIMULATE'); await nx.test.settle(); return true;"); await Idle(w, 200); await Shot(w, "bus_11_dark_simulate");
         await JS(w, "await nx.test.rail('ANALYZE'); await nx.test.settle(); return true;"); await Idle(w, 200); await Shot(w, "bus_12_dark_analyze");
         var scan = await JS(w, "return JSON.stringify(nx.test.accentScan());");

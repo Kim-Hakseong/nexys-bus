@@ -1,0 +1,17 @@
+{
+  "name": "example-afdx",
+  "description": "ARINC 664 bench: receive the peer's VLs for 30 s, then send two VLs for 30 s (fake values, replace with the bench's own)",
+  "notes": "Port names come from the log line 'ports:' of a first run without txVls.",
+  "afdx": {
+    "icd": "example-afdx-icd.csv",
+    "nicA": "Ethernet A",
+    "nicB": "Ethernet B",
+    "listenSeconds": 30,
+    "expectVls": [],
+    "txVls": [10, 11],
+    "sendSeconds": 30,
+    "peerName": "peer end system",
+    "jmaxMs": 0.5,
+    "skewMaxMs": 10
+  }
+}

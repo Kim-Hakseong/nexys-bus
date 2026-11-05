@@ -31,9 +31,17 @@ const SECTIONS: { id: string; label: string; html: (app: any) => string }[] = [
     <h4>IMPORT</h4><p>CSV·XLSX(첫 시트)는 워드당 1행. 열 이름을 자동으로 알아보고(message·rt·sa·tr·wc·period_ms·bus·word·bit_start·bit_len·type·scale·offset·unit·name), 못 알아본 열은 직접 고릅니다. 허브 JSON과 메시지 XML은 바로 열립니다. 가져온 ICD는 곧바로 프로젝트의 프레임이 됩니다.</p>
     <h4>EDIT</h4><p>메시지·워드 표에서 바로 고치고 추가·삭제합니다. RT·SA 0~31, WC 1~32, 비트 겹침은 error(내보내기 차단), 중복 RT/SA/T-R은 warning.</p>
     <h4>EXPORT</h4><p>시뮬레이터 프로젝트(설정의 템플릿 프로젝트 복제) · 메시지 XML(XSD 검사 + 재판독) · 커스텀 디바이스 XML · 자동화 스크립트. 허브 JSON/CSV는 항상 함께 저장됩니다.</p>` },
+  { id: 'afdx', label: 'ARINC 664', html: () => `
+    <h3>ARINC 664 (AFDX) — 캡처 · 검사 · 송신 · 상호운용</h3>
+    <p>시작 화면 <b>NEW ARINC 664 PROJECT</b>(또는 PROJECT › PROTOCOL)로 만들면 ICD · SIMULATE · ANALYZE가 664 화면으로 바뀌고 <b>INTEROP</b> 레일이 생깁니다. <code>.pcapng</code>/<code>.pcap</code>을 열면 자동으로 664 프로젝트가 됩니다.</p>
+    <div class="help-card"><b>ICD (허브 스키마 1.1)</b><p>VL(vl_id · BAG 1~128 ms의 2^k · Lmax 64~1518 B · 네트워크 A/B/AB) → 포트(sub-VL · sampling/queuing · IP/UDP · 페이로드 크기) → 파라미터(바이트 offset · u8~f64 · endian · scale · offset_val · unit). CSV/XLSX는 파라미터당 1행(열 이름 자동 인식).</p></div>
+    <div class="help-card"><b>장치</b><p>Virtual network는 항상 있습니다(A/B 루프백, 지연·지터·B 스큐·손실·중복 주입). 이더넷 포트는 패킷 캡처 라이브러리(Npcap, 별도 설치 — NexysBus에 포함되지 않음)가 있을 때만 PROJECT › NETWORK A/B에서 고릅니다. 전용 AFDX 카드는 자리만 있습니다.</p></div>
+    <div class="help-card"><b>SIMULATE</b><p>VL마다 BAG마다 한 프레임(포트 차례대로), 이중화 VL은 A·B 동시, SN 자동(시작 0, 이후 1~255). RUN 표의 MEAN/MIN/MAX는 실제 송신 간격, JITTER는 예정 시각 대비 편차입니다. SENDER FAULTS: SN 건너뜀 · A/B 누락 · Lmax 초과 · BAG 위반(0.1 ms 뒤 추가 프레임).</p></div>
+    <div class="help-card"><b>ANALYZE 검사 규칙</b><p>무결성: SN 0 = 리셋, 다음 = 이전+1(1~255 순환), 1~127 앞서면 그만큼 손실, 그 외 역순·중복(폐기). BAG: 같은 네트워크 간격 &lt; BAG − Jmax(0.5 ms). Lmax: FCS 포함 길이 &gt; Lmax. RM: VL·SN이 같은 A/B 사본 중 먼저 온 유효 프레임 채택, 다른 쪽은 중복이며 그 지연이 스큐, 짝이 창(20 ms) 안에 없으면 그 네트워크 누락.</p></div>
+    <div class="help-card"><b>INTEROP</b><p>상대 → NexysBus: 캡처를 열면 VL 수신 · ICD 밖 VL · SN · BAG · Lmax · A/B · 스큐 · 디코드 항목이 PASS/FAIL로 판정됩니다. NexysBus → 상대: 보낸 프레임 수 옆에 상대가 보고한 수신 수를 적으면 판정. EXPORT REPORT…로 interop-report.md.</p></div>` },
   { id: 'keys', label: '단축키', html: () => `
     <h3>키보드 단축키</h3>
-    <table class="help-keys">${[['PROJECT / ANALYZE / SIMULATE / ICD / SETTINGS', 'Ctrl + 1 · 2 · 3 · 4 · 5'], ['열기 (프로젝트 · 캡처 · ICD)', 'Ctrl + O'], ['프로젝트 저장', 'Ctrl + S'], ['테마 / 플롯 밝기', 'Ctrl + T / Ctrl + P'], ['도움말 / 닫기', 'F1 / Esc']].map(([a, b]) => `<tr><td>${a}</td><td><kbd>${b}</kbd></td></tr>`).join('')}</table>` },
+    <table class="help-keys">${[['PROJECT / ANALYZE / SIMULATE / ICD / SETTINGS', 'Ctrl + 1 · 2 · 3 · 4 · 5'], ['INTEROP (ARINC 664 프로젝트)', 'Ctrl + 6'], ['열기 (프로젝트 · 캡처 · ICD)', 'Ctrl + O'], ['프로젝트 저장', 'Ctrl + S'], ['테마 / 플롯 밝기', 'Ctrl + T / Ctrl + P'], ['도움말 / 닫기', 'F1 / Esc']].map(([a, b]) => `<tr><td>${a}</td><td><kbd>${b}</kbd></td></tr>`).join('')}</table>` },
   { id: 'tips', label: '활용 팁', html: () => `
     <h3>활용 팁</h3>
     <div class="help-card"><b>정답지 만들기</b><p>10 s BATCH는 가상 시계라 메시지 수가 정확히 Σ ⌈10 s / 주기⌉ 입니다. 디코드 EU와 입력 파형의 차이는 scale/2 이하여야 해요.</p></div>

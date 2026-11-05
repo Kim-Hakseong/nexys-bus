@@ -3,9 +3,10 @@
 ## 8.1 파일
 | 파일 | 형식 | 내용 |
 |---|---|---|
-| `.nxb` | JSON | 프로젝트: device · bus(channel, monitorChannel, minorFrameMs, responseTenthUs, gapUs, seed) · icd · schedule · sources · errors · captureDir |
+| `.nxb` | JSON | 프로젝트: protocol(mil1553 · arinc664) · afdx(664: 포트 · 검사 설정 · 송신 · 상대 보고) · device · bus(channel, monitorChannel, minorFrameMs, responseTenthUs, gapUs, seed) · icd · schedule · sources · errors · captureDir |
 | `.mon` | 바이너리(복합문서 메타 + 120바이트 레코드) | 1553 캡처. 레코드 = 타임태그(µs, 상위 32비트 포함) · 활동 · 오류 · 명령어 1/2 · 상태어 1/2 · 데이터 수 · 데이터 최대 40 · 응답 시간 |
-| 허브 JSON | JSON(스키마 1.0) | ICD 전체(메시지 → 워드). 내보내기 기본 형식 |
+| `.pcapng` · `.pcap` | 패킷 캡처(pcapng: 인터페이스 여러 개 = 네트워크 A/B, ns 타임스탬프) | ARINC 664 캡처. NexysBus가 쓰는 파일은 인터페이스 "A"·"B", if_tsresol 9, FCS 없음. Wireshark/dumpcap 파일을 그대로 엽니다 |
+| 허브 JSON | JSON(스키마 1.0 · 1.1) | ICD 전체(1553: 메시지 → 워드 · 1.1의 `vls`: VL → 포트 → 파라미터). 내보내기 기본 형식 |
 | ICD CSV | 텍스트 | 워드당 한 줄([3장 열 표](03-icd.md#31-import)) |
 | `driver.json` | JSON | 카드 드라이버 연결([6장](06-hardware.md)) |
 | `settings.json` | JSON | `%LOCALAPPDATA%\NexysBus\settings.json`: 테마·플롯·시간 표시·템플릿·캡처 폴더·최근 목록 |
@@ -34,7 +35,7 @@
 | 도움말 / 닫기 | F1 / Esc |
 | 목록 이동 · 추이 · 복사 | ↑↓ PgUp PgDn Home End · Enter · Ctrl + C |
 
-파일(`.nxb` · `.mon` · 시뮬레이터 프로젝트 · ICD)은 창 어디에나 끌어다 놓으면 알맞은 화면으로 열립니다.
+파일(`.nxb` · `.mon` · `.pcapng` · 시뮬레이터 프로젝트 · ICD)은 창 어디에나 끌어다 놓으면 알맞은 화면으로 열립니다.
 
 ![도움말(F1)](images/13_help.png)
 

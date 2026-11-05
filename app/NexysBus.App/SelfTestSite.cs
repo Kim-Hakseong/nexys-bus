@@ -212,6 +212,8 @@ public static partial class SelfTest
         // bench values come from the site profile (docs/site-profile.md); explicit command-line values override it; without either only H0 runs
         SiteProfile? prof = null; string profArg = Arg("--profile");
         if (profArg.Length > 0) { prof = SiteProfile.Load(profArg); L($"profile {prof.Name} ({prof.Path}): {prof.Description}"); if (prof.Notes.Length > 0) L("profile notes: " + prof.Notes); SiteSum["profile"] = new { prof.Name, prof.Path, prof.Description, prof.Notes }; }
+        // an "afdx" section runs the ARINC 664 bench first (N0..N2); a profile without a 1553 frame stops there
+        if (prof?.Afdx != null) { await SiteAfdx(w, prof); if (prof.Messages.Count == 0 && prof.Icd.Length == 0 && !Has("--rt")) return; }
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         int card = int.Parse(Arg("--card", "0")), channel = int.Parse(Arg("--channel", "0")), mon = Has("--mon") ? int.Parse(Arg("--mon")) : prof?.MonitorChannel ?? -1, rt = Has("--rt") ? int.Parse(Arg("--rt")) : prof?.Rt ?? 4, wc = int.Parse(Arg("--wc", "32")), poll = int.Parse(Arg("--poll", "5"));
         double period = Has("--period") ? double.Parse(Arg("--period"), ci) : prof?.PeriodMs ?? 20, seconds = double.Parse(Arg("--seconds", "30"), ci), bseconds = double.Parse(Arg("--bseconds", "30"), ci), minutes = double.Parse(Arg("--minutes", "10"), ci), tagUnit = double.Parse(Arg("--tagunit", "1"), ci);

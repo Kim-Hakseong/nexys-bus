@@ -4,6 +4,7 @@ import { bridge } from '@core/bridge';
 import { I } from '@core/icons';
 import { State } from '@core/types';
 import { esc, h } from '@core/util';
+import { AfdxAnalyzePage, AfdxIcdPage, AfdxInteropPage, AfdxSimPage } from './afdx';
 import { BusMode } from './analyze';
 import { IcdPage } from './icd';
 import { Help } from './help';
@@ -12,7 +13,7 @@ import { SettingsPage } from './settings';
 import { SimulatePage } from './simulate';
 import { StartPage } from './start';
 
-export type BusState = State & { rail: string; project: any; sim: any; devices: any[]; recent: any[]; app?: any };
+export type BusState = State & { rail: string; project: any; sim: any; devices: any[]; recent: any[]; app?: any; afdx?: any };
 let S: BusState | null = null;
 const app = document.getElementById('app')!;
 const hdr = h(`<header class="hdr"></header>`);
@@ -23,9 +24,13 @@ const ftr = h(`<footer class="ftr"><span class="d"></span><span class="txt"></sp
 body.append(rail, main); app.append(hdr, body, ftr);
 const help = new Help();
 const start = new StartPage(); const project = new ProjectPage(); const analyze = new BusMode(); const simulate = new SimulatePage(); const icd = new IcdPage(); const settings = new SettingsPage();
+// ARINC 664 pages: built on first use by an arinc664 project
+let afdx: { icd: AfdxIcdPage; sim: AfdxSimPage; an: AfdxAnalyzePage; iop: AfdxInteropPage } | null = null;
+const A = () => afdx ??= { icd: new AfdxIcdPage(), sim: new AfdxSimPage(), an: new AfdxAnalyzePage(), iop: new AfdxInteropPage() };
+const is664 = () => S?.project?.protocol === 'arinc664';
 const RAILS: { id: string; label: string; icon: string; key: string }[] = [
   { id: 'PROJECT', label: 'PROJECT', icon: I.file(18), key: '1' }, { id: 'ANALYZE', label: 'ANALYZE', icon: I.table(18), key: '2' }, { id: 'SIMULATE', label: 'SIMULATE', icon: I.lineC(18), key: '3' },
-  { id: 'ICD', label: 'ICD', icon: I.list(18), key: '4' }, { id: 'SETTINGS', label: 'SETTINGS', icon: I.sliders(18), key: '5' }];
+  { id: 'ICD', label: 'ICD', icon: I.list(18), key: '4' }, { id: 'INTEROP', label: 'INTEROP', icon: I.table(18), key: '6' }, { id: 'SETTINGS', label: 'SETTINGS', icon: I.sliders(18), key: '5' }];
 
 function renderHeader() {
   if (!S) return; const a = S.app ?? {}; const p = S.project ?? {};
@@ -37,7 +42,7 @@ function renderHeader() {
 }
 function renderRail() {
   if (!S) return;
-  rail.innerHTML = `<button type="button" class="home" data-home title="Start">${I.grip(16)}</button>` + RAILS.map(r => `<button type="button" data-rail="${r.id}" class="${S!.rail === r.id ? 'on' : ''}" title="${r.label} (Ctrl+${r.key})"${r.id === 'SETTINGS' ? ' style="margin-top:auto"' : ''}>${r.icon}<span>${r.label}</span></button>`).join('');
+  rail.innerHTML = `<button type="button" class="home" data-home title="Start">${I.grip(16)}</button>` + RAILS.filter(r => r.id !== 'INTEROP' || is664()).map(r => `<button type="button" data-rail="${r.id}" class="${S!.rail === r.id ? 'on' : ''}" title="${r.label} (Ctrl+${r.key})"${r.id === 'SETTINGS' ? ' style="margin-top:auto"' : ''}>${r.icon}<span>${r.label}</span></button>`).join('');
 }
 rail.addEventListener('click', e => { const t = e.target as HTMLElement; if (t.closest('[data-home]')) { setRail('START'); return; } const r = (t.closest('[data-rail]') as HTMLElement | null)?.dataset.rail; if (r) setRail(r); });
 function setRail(r: string) { bridge.call('rail', { name: r }); }
@@ -48,7 +53,8 @@ hdr.addEventListener('click', e => {
 });
 function renderMain() {
   if (!S) return;
-  const want: HTMLElement[] = S.rail === 'PROJECT' ? [project.el] : S.rail === 'ANALYZE' ? [analyze.el] : S.rail === 'SIMULATE' ? [simulate.el] : S.rail === 'ICD' ? [icd.el] : S.rail === 'SETTINGS' ? [settings.el] : [start.el];
+  const x = is664() && ['ANALYZE', 'SIMULATE', 'ICD', 'INTEROP'].includes(S.rail) ? A() : null;
+  const want: HTMLElement[] = S.rail === 'PROJECT' ? [project.el] : S.rail === 'ANALYZE' ? [x ? x.an.el : analyze.el] : S.rail === 'SIMULATE' ? [x ? x.sim.el : simulate.el] : S.rail === 'ICD' ? [x ? x.icd.el : icd.el] : S.rail === 'INTEROP' ? [x ? x.iop.el : start.el] : S.rail === 'SETTINGS' ? [settings.el] : [start.el];
   want.forEach((el, i) => { if (main.children[i] !== el) main.insertBefore(el, main.children[i] ?? null); });
   while (main.children.length > want.length) main.lastElementChild!.remove();
 }
@@ -56,12 +62,14 @@ function renderFooter() {
   if (!S) return;
   (ftr.querySelector('.d') as HTMLElement).className = 'd ' + S.status.led;
   ftr.querySelector('.txt')!.textContent = S.status.text || (S.project?.name ? `${S.project.name} · ${S.project.icd?.messages ?? 0} messages` : 'Open a project or create one');
+  if (is664()) { const r = S.afdx?.run ?? {}; ftr.querySelector('.r')!.textContent = r.running ? `network running · ${Math.round(r.sent ?? 0).toLocaleString('en-US')} frames sent · ${Math.round(r.received ?? 0).toLocaleString('en-US')} received` : ''; return; }
   ftr.querySelector('.r')!.textContent = S.sim?.running ? `bus running · ${Math.round(S.sim.messages).toLocaleString('en-US')} messages · ${S.sim.loadPct.toFixed(1)} %` : '';
 }
 function applyState(next: BusState) {
   S = next; document.documentElement.dataset.theme = S.theme; document.documentElement.dataset.plot = S.plot;
   renderHeader(); renderRail(); renderMain(); renderFooter(); help.setState(S);
-  if (S.rail === 'START') start.setState(S); else if (S.rail === 'PROJECT') project.setState(S); else if (S.rail === 'ANALYZE') analyze.setState(S); else if (S.rail === 'SIMULATE') simulate.setState(S); else if (S.rail === 'ICD') icd.setState(S); else if (S.rail === 'SETTINGS') settings.setState(S);
+  if (is664() && ['ANALYZE', 'SIMULATE', 'ICD', 'INTEROP'].includes(S.rail)) { const x = A(); if (S.rail === 'ANALYZE') x.an.setState(S); else if (S.rail === 'SIMULATE') x.sim.setState(S); else if (S.rail === 'ICD') x.icd.setState(S); else x.iop.setState(S); }
+  else if (S.rail === 'START') start.setState(S); else if (S.rail === 'PROJECT') project.setState(S); else if (S.rail === 'ANALYZE') analyze.setState(S); else if (S.rail === 'SIMULATE') simulate.setState(S); else if (S.rail === 'ICD') icd.setState(S); else if (S.rail === 'SETTINGS') settings.setState(S);
   ftr.querySelector('.r')!.textContent = (S.developer ? 'DEVELOPER · ' : '') + (ftr.querySelector('.r')!.textContent || '');
 }
 bridge.on('state', m => { const st = m.state as BusState; if (!st.files && S) st.files = S.files; else if (!st.files) st.files = []; applyState(st); });
@@ -85,11 +93,11 @@ document.addEventListener('keydown', e => {
   const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName);
   if (!(e.ctrlKey || e.metaKey)) { if (e.key === 'F5') e.preventDefault(); return; }
   const k = e.key.toLowerCase();
-  if (inInput && !['o', 's', 'd', '1', '2', '3', '4', '5'].includes(k)) return;
+  if (inInput && !['o', 's', 'd', '1', '2', '3', '4', '5', '6'].includes(k)) return;
   if (k === 'o') { e.preventDefault(); bridge.call('openDialog'); } else if (k === 's') { e.preventDefault(); bridge.call('project.save'); }
   else if (k === 'd' && e.shiftKey) { e.preventDefault(); bridge.call('setDeveloper', { on: !S?.developer }); }
   else if (k === 't') { e.preventDefault(); bridge.call('setTheme', { theme: S?.theme === 'dark' ? 'light' : 'dark' }); } else if (k === 'p') { e.preventDefault(); bridge.call('setPlot', { plot: S?.plot === 'dark' ? 'light' : 'dark' }); }
-  else { const r = RAILS.find(x => x.key === k); if (r) { e.preventDefault(); setRail(r.id); } }
+  else { const r = RAILS.find(x => x.key === k && (x.id !== 'INTEROP' || is664())); if (r) { e.preventDefault(); setRail(r.id); } }
 });
 document.addEventListener('dragover', e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
 document.addEventListener('drop', e => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); bridge.postFiles(e.dataTransfer.files); } else if (!e.defaultPrevented) e.preventDefault(); });
@@ -104,6 +112,7 @@ const test = {
   async clickSel(sel: string) { const el = document.querySelector(sel) as HTMLElement | null; if (!el) throw new Error('no element ' + sel); el.click(); await new Promise(r => setTimeout(r, 80)); await settle(); return true; },
   async help(section = 'start') { help.show(section); await new Promise(r => setTimeout(r, 100)); return !!document.querySelector('.help-pane'); },
   m1553: () => analyze.testApi(), icd: () => icd.testApi(), sim: () => simulate.testApi(), project: () => project.testApi(),
+  afdx: () => ({ icd: A().icd.testApi(), sim: A().sim.testApi(), an: A().an.testApi(), iop: A().iop.testApi() }), afdxBuilt: () => afdx !== null,
   plot: () => (analyze as any).pv,
   /** Elements whose border / outline uses an accent colour (must be 0). */
   accentScan() {
