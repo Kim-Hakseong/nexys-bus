@@ -17,7 +17,7 @@ USB 1553 카드(단일 기능 채널 2개)를 BC로 HIL 시뮬레이터의 RT 4(
 영상 파일은 [v0.3.0-beta.2 Release](https://github.com/Kim-Hakseong/nexys-bus/releases/tag/v0.3.0-beta.2)에 첨부돼 있습니다: **전체(2분 6초)** [nexysbus-demo.mp4](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo.mp4) · **60초 요약** [nexysbus-demo-60s.mp4](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo-60s.mp4) · 자막 [srt](https://github.com/Kim-Hakseong/nexys-bus/releases/download/v0.3.0-beta.2/nexysbus-demo.srt)
 
 ## 사용 가이드
-처음 쓰는 분은 **[사용 가이드](docs/guide/README.md)**부터 보세요 — 설치, 화면 구성, 5분 따라 하기, PROJECT · ICD · SIMULATE · ANALYZE 기능별 설명, 하드웨어 카드 연결, 자동화·현장 측정, 파일 형식·단축키·문제 해결(8장, 화면 그림 포함). 앱 안에서는 F1.
+**처음이라면 → [사용 가이드](docs/guide/README.md)** · 카드 없이 버스 돌려 보기 → **[빠른 시작: 가상 버스](docs/guide/quick-virtual.md)**(빨간 박스 그림 따라 10분) · 캡처 파일 열기 → **[빠른 시작: 캡처 파일](docs/guide/quick-capture.md)**(5분) · 모든 기능은 아래 장별 설명서. 앱 안에서는 F1.
 
 | [1. 시작하기](docs/guide/01-getting-started.md) | [2. PROJECT](docs/guide/02-project.md) | [3. ICD](docs/guide/03-icd.md) | [4. SIMULATE](docs/guide/04-simulate.md) |
 |---|---|---|---|
